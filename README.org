@@ -1,0 +1,166 @@
+#+title: clos-constructor
+#+author: Jonathan Hustad
+
+Extract structured data from unstructured text via LLMs, constructing typed CLOS instances.
+
+Define ordinary CLOS classes. =clos-constructor= introspects them via the MOP,
+generates a JSON Schema, constrains the LLM to produce valid output, then
+constructs and returns typed instances with working accessors.
+
+* Quick start
+
+#+begin_src lisp
+;; 1. Define a class — just a normal CLOS class
+(defclass person ()
+  ((name    :initarg :name    :accessor person-name    :type string)
+   (age     :initarg :age     :accessor person-age     :type integer)
+   (email   :initarg :email   :accessor person-email   :type (or null string))
+   (hobbies :initarg :hobbies :accessor person-hobbies :type (list-of string))))
+
+;; 2. Extract from text
+(let* ((backend (clos-constructor/llama:make-llama-backend
+                 :model model :context ctx))
+       (result  (extract backend 'person
+                  "Alice Chen is 32. Reach her at alice@example.com.
+                   She enjoys rock climbing, painting, and cello.")))
+  (person-name (extraction-result-instance result)))
+;; => "Alice Chen"
+#+end_src
+
+The returned instance is a real CLOS object — =typep=, =slot-value=, and all
+accessors work as expected.
+
+* Installation
+
+Requires [[https://github.com/jonathanhudstad/cl-llama-cpp][cl-llama-cpp]] and [[https://github.com/jonathanhudstad/cl-llama-cpp-extras][cl-llama-cpp-extras]] for the llama.cpp backend.
+
+#+begin_src lisp
+(ql:quickload :clos-constructor)        ; core (no LLM dependency)
+(ql:quickload :clos-constructor/llama)  ; llama.cpp backend
+#+end_src
+
+* Systems
+
+| System                          | Description                              | Dependencies                                        |
+|---------------------------------+------------------------------------------+-----------------------------------------------------|
+| =clos-constructor=              | Core library — introspection, IR, schema | =closer-mop=, =yason=                               |
+| =clos-constructor/llama=        | llama.cpp backend                        | =cl-llama-cpp=, =cl-llama-cpp-extras/json-schema=   |
+| =clos-constructor/tests=        | Core test suite                          | =rove=                                              |
+| =clos-constructor/llama/tests=  | Backend tests                            | =rove=                                              |
+| =clos-constructor/examples=     | Example programs                         | =clos-constructor/llama=                             |
+
+* How it works
+
+#+begin_example
+  CLOS class
+      │
+      ▼
+  MOP introspection (closer-mop)
+      │
+      ▼
+  IR schema (ir-schema, ir-field, ir-type-*)
+      │
+      ├──▶ JSON Schema (hash table)
+      │        │
+      │        ▼
+      │    GBNF grammar (via cl-llama-cpp-extras/json-schema)
+      │        │
+      │        ▼
+      │    Constrained generation (cl-llama-cpp :grammar)
+      │        │
+      │        ▼
+      │    JSON response
+      │
+      ├──▶ Validation (validate-data)
+      │
+      ▼
+  CLOS instance (construct-from-data)
+#+end_example
+
+The grammar constraint guarantees the model produces valid JSON matching the
+schema. Validation catches edge cases; failed attempts retry automatically
+(default 3 retries).
+
+* Supported types
+
+Type specifiers on CLOS slots map to JSON Schema types:
+
+| CL type specifier                | JSON Schema         | IR type            |
+|----------------------------------+---------------------+--------------------|
+| =string=                         | ={"type":"string"}= | =ir-type-primitive= |
+| =integer=, =fixnum=              | ={"type":"integer"}= | =ir-type-primitive= |
+| =float=, =number=                | ={"type":"number"}=  | =ir-type-primitive= |
+| =boolean=                        | ={"type":"boolean"}= | =ir-type-primitive= |
+| =(member :a :b :c)=              | ={"enum":["a","b","c"]}= | =ir-type-enum= |
+| =(list-of <type>)=               | ={"type":"array","items":{...}}= | =ir-type-list= |
+| =(or null <type>)=               | ={"anyOf":[{...},{"type":"null"}]}= | =ir-type-nullable= |
+| A CLOS class name                | Nested object       | =ir-type-object=   |
+
+* API
+
+** Core
+
+- =compile-extractor (class &key mode slot-list slot-types user-prompt)= — pre-compile the extraction pipeline.
+- =extract (backend compilation-or-class document &key max-retries temperature max-tokens user-prompt)= — extract a single instance.
+- =extract-list (backend compilation-or-class document &key ...)= — extract multiple instances.
+- =class-to-schema (class &key mode slot-list slot-types)= — introspect a class into an IR schema.
+- =schema-to-json-schema (schema)= — convert an IR schema to a JSON Schema hash table.
+
+** Backend protocol
+
+Implement two generic functions to add a new backend:
+
+#+begin_src lisp
+(defmethod backend-output-schema ((backend my-backend) schema)
+  ;; Return the output schema representation for this backend
+  ...)
+
+(defmethod backend-generate ((backend my-backend) schema document
+                             &key model temperature max-tokens
+                                  system-prompt user-prompt)
+  ;; Call the LLM, return an extraction-result with :raw-response and :raw-data
+  ...)
+#+end_src
+
+** llama.cpp backend
+
+#+begin_src lisp
+(clos-constructor/llama:make-llama-backend :model model :context ctx)
+#+end_src
+
+Uses grammar-constrained generation — the model is forced to produce JSON
+matching the schema. No post-hoc parsing failures.
+
+* Extraction modes
+
+=class-to-schema= and =compile-extractor= accept a =:mode= keyword:
+
+| Mode        | Behavior                                        |
+|-------------+-------------------------------------------------|
+| =:full=     | All slots (default)                              |
+| =:required= | Only slots with =:initarg= and no =:initform=   |
+| =:custom=   | Only slots listed in =:slot-list=                |
+
+* Running the example
+
+#+begin_src lisp
+(ql:quickload :clos-constructor/examples)
+
+(setf clos-constructor/examples/extract-llama::*model-path*
+      "/path/to/model.gguf")
+
+(clos-constructor/examples/extract-llama:run)
+#+end_src
+
+Or set the environment variable =LLAMA_MODEL= before starting the Lisp image.
+
+* Running tests
+
+#+begin_src lisp
+(asdf:test-system :clos-constructor)        ; core tests (no model needed)
+(asdf:test-system :clos-constructor/llama)  ; backend tests (no model needed)
+#+end_src
+
+* License
+
+MIT

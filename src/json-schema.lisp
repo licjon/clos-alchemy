@@ -1,0 +1,65 @@
+(in-package #:clos-constructor)
+
+(defun schema-to-json-schema (schema)
+  "Translate an ir-schema to a JSON Schema representation (hash table).
+The result is directly serializable via yason:encode."
+  (%ir-schema-to-json-schema schema))
+
+(defun %ir-schema-to-json-schema (schema)
+  (let ((ht (make-hash-table :test 'equal))
+        (props (make-hash-table :test 'equal))
+        (required '()))
+    (setf (gethash "type" ht) "object")
+    (dolist (field (ir-schema-fields schema))
+      (setf (gethash (ir-field-name field) props)
+            (%ir-type-to-json-schema (ir-field-type field)))
+      (when (ir-field-required-p field)
+        (push (ir-field-name field) required)))
+    (setf (gethash "properties" ht) props)
+    (when required
+      (setf (gethash "required" ht) (nreverse required)))
+    (setf (gethash "additionalProperties" ht) nil)
+    ht))
+
+(defun %ir-type-to-json-schema (ir-type)
+  (etypecase ir-type
+    (ir-type-primitive (%primitive-to-json-schema ir-type))
+    (ir-type-enum (%enum-to-json-schema ir-type))
+    (ir-type-list (%list-to-json-schema ir-type))
+    (ir-type-object (%object-to-json-schema ir-type))
+    (ir-type-nullable (%nullable-to-json-schema ir-type))))
+
+(defun %primitive-to-json-schema (ir-type)
+  (let ((ht (make-hash-table :test 'equal)))
+    (setf (gethash "type" ht)
+          (ecase (ir-type-primitive-kind ir-type)
+            (:string "string")
+            (:integer "integer")
+            (:number "number")
+            (:boolean "boolean")))
+    ht))
+
+(defun %enum-to-json-schema (ir-type)
+  (let ((ht (make-hash-table :test 'equal)))
+    (setf (gethash "type" ht) "string")
+    (setf (gethash "enum" ht) (ir-type-enum-values ir-type))
+    ht))
+
+(defun %list-to-json-schema (ir-type)
+  (let ((ht (make-hash-table :test 'equal)))
+    (setf (gethash "type" ht) "array")
+    (setf (gethash "items" ht)
+          (%ir-type-to-json-schema (ir-type-list-element-type ir-type)))
+    ht))
+
+(defun %object-to-json-schema (ir-type)
+  (%ir-schema-to-json-schema (ir-type-object-schema ir-type)))
+
+(defun %nullable-to-json-schema (ir-type)
+  (let ((ht (make-hash-table :test 'equal)))
+    (setf (gethash "anyOf" ht)
+          (list (%ir-type-to-json-schema (ir-type-nullable-inner-type ir-type))
+                (let ((null-ht (make-hash-table :test 'equal)))
+                  (setf (gethash "type" null-ht) "null")
+                  null-ht)))
+    ht))
