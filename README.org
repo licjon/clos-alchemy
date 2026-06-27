@@ -103,7 +103,10 @@ Type specifiers on CLOS slots map to JSON Schema types:
 | A CLOS class name | Nested object                     | =ir-type-object=    |
 
 Only the type specifiers above are supported. =list-of= is a custom compound
-type provided by this library, not a standard CL specifier.
+type provided by this library because standard CL has no parameterised list
+type — =list= carries no element type, so there is no way to tell the schema
+layer what kind of items the array should contain. All elements must be the
+same type; mixed-type arrays (e.g. =["alice", 32, true]=) are not supported.
 
 Unsupported named types (=hash-table=, =symbol=, =keyword=, =character=,
 =pathname=) signal a =schema-error=. Unsupported compound specifiers
