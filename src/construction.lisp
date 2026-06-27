@@ -52,12 +52,35 @@ DATA is a hash table (from JSON parsing). Builds nested objects bottom-up."
                 (string (parse-integer value))))
     (:number (etypecase value
                (number value)
-               (string (read-from-string value))))
+               (string (%safe-parse-number value))))
     (:boolean (cond
                 ((member value '(t :true) :test #'eq) t)
                 ((member value '(nil :false) :test #'eq) nil)
                 ((stringp value) (string-equal value "true"))
                 (t (not (null value)))))))
+
+(defun %safe-parse-number (string)
+  "Parse a numeric value from STRING without invoking the full CL reader."
+  (let ((end (length string)))
+    (when (zerop end)
+      (error 'generation-error :backend :coerce
+             :reason "empty string for number field"))
+    (multiple-value-bind (integer pos)
+        (parse-integer string :junk-allowed t)
+      (cond
+        ((and integer (= pos end)) integer)
+        ((and integer (< pos end) (char= (char string pos) #\.))
+         (multiple-value-bind (frac frac-end)
+             (parse-integer string :start (1+ pos) :junk-allowed t)
+           (if (and frac (= frac-end end))
+               (let ((divisor (expt 10 (- frac-end (1+ pos)))))
+                 (if (char= (char string 0) #\-)
+                     (- integer (/ frac divisor))
+                     (+ integer (/ frac divisor))))
+               (error 'generation-error :backend :coerce
+                      :reason (format nil "invalid number: ~S" string)))))
+        (t (error 'generation-error :backend :coerce
+                  :reason (format nil "invalid number: ~S" string)))))))
 
 (defun %coerce-enum (value)
   "Convert JSON enum string to a keyword."

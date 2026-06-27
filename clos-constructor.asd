@@ -33,7 +33,9 @@
                  (:file "validation")
                  (:file "construction")
                  (:file "prompt")
-                 (:file "json-parse"))))
+                 (:file "json-parse")
+                 (:file "security")
+                 (:file "unsupported-types"))))
   :perform (test-op (op c) (symbol-call :rove :run c)))
 
 (defsystem "clos-constructor/examples"

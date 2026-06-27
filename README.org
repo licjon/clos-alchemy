@@ -102,9 +102,14 @@ Type specifiers on CLOS slots map to JSON Schema types:
 | =(or null <type>)=  | ={"anyOf":[{...},{"type":"null"}]}= | =ir-type-nullable=  |
 | A CLOS class name | Nested object                     | =ir-type-object=    |
 
-Only the type specifiers above are supported. Unsupported specifiers (e.g.
-hash tables, alists, =satisfies=) signal a =schema-error=. =list-of= is a
-custom compound type provided by this library, not a standard CL specifier.
+Only the type specifiers above are supported. =list-of= is a custom compound
+type provided by this library, not a standard CL specifier.
+
+Unsupported named types (=hash-table=, =symbol=, =keyword=, =character=,
+=pathname=) signal a =schema-error=. Unsupported compound specifiers
+(=(vector ...)=, =(array ...)=, =(unsigned-byte N)=, =(satisfies ...)=,
+=(complex ...)=, =(cons ...)=, =(values ...)=) currently fall back to =string=
+silently — use =:slot-types= overrides to map these explicitly.
 
 * API
 
