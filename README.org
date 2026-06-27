@@ -1,7 +1,7 @@
 #+title: clos-constructor
 #+author: Jonathan Hustad
 
-Extract structured data from unstructured text via LLMs, constructing typed CLOS instances.
+Extract structured data from unstructured text via LLMs into typed CLOS instances.
 
 Define ordinary CLOS classes. =clos-constructor= introspects them via the MOP,
 generates a JSON Schema, constrains the LLM to produce valid output, then
@@ -41,13 +41,13 @@ Requires [[https://github.com/jonathanhudstad/cl-llama-cpp][cl-llama-cpp]] and [
 
 * Systems
 
-| System                          | Description                              | Dependencies                                        |
-|---------------------------------+------------------------------------------+-----------------------------------------------------|
-| =clos-constructor=              | Core library — introspection, IR, schema | =closer-mop=, =yason=                               |
-| =clos-constructor/llama=        | llama.cpp backend                        | =cl-llama-cpp=, =cl-llama-cpp-extras/json-schema=   |
-| =clos-constructor/tests=        | Core test suite                          | =rove=                                              |
-| =clos-constructor/llama/tests=  | Backend tests                            | =rove=                                              |
-| =clos-constructor/examples=     | Example programs                         | =clos-constructor/llama=                             |
+| System                       | Description                               | Dependencies                                  |
+|------------------------------+-------------------------------------------+-----------------------------------------------|
+| =clos-constructor=             | Core library — introspection, IR, schema  | =closer-mop=, =yason=                             |
+| =clos-constructor/llama=       | llama.cpp backend                         | =cl-llama-cpp=, =cl-llama-cpp-extras/json-schema= |
+| =clos-constructor/tests=       | Core test suite                           | =rove=                                          |
+| =clos-constructor/llama/tests= | Backend tests                             | =rove=                                          |
+| =clos-constructor/examples=    | Example programs                          | =clos-constructor/llama=                        |
 
 * How it works
 
@@ -77,30 +77,40 @@ Requires [[https://github.com/jonathanhudstad/cl-llama-cpp][cl-llama-cpp]] and [
   CLOS instance (construct-from-data)
 #+end_example
 
-The grammar constraint guarantees the model produces valid JSON matching the
-schema. Validation catches edge cases; failed attempts retry automatically
-(default 3 retries).
+The IR (intermediate representation) normalises CLOS MOP metadata into a
+backend-agnostic schema. =ir-schema= describes the extraction target,
+=ir-field= its slots, and =ir-type-*= structs form a tagged union of supported
+types. Backends only see the IR — they never touch MOP internals.
+
+Grammar-constrained generation eliminates JSON parsing failures. Validation
+then checks semantic constraints (field types, required fields); failed
+attempts retry automatically (default 3 retries). Retries are triggered on
+schema validation failure, not grammar failure.
 
 * Supported types
 
 Type specifiers on CLOS slots map to JSON Schema types:
 
-| CL type specifier                | JSON Schema         | IR type            |
-|----------------------------------+---------------------+--------------------|
-| =string=                         | ={"type":"string"}= | =ir-type-primitive= |
-| =integer=, =fixnum=              | ={"type":"integer"}= | =ir-type-primitive= |
-| =float=, =number=                | ={"type":"number"}=  | =ir-type-primitive= |
-| =boolean=                        | ={"type":"boolean"}= | =ir-type-primitive= |
-| =(member :a :b :c)=              | ={"enum":["a","b","c"]}= | =ir-type-enum= |
-| =(list-of <type>)=               | ={"type":"array","items":{...}}= | =ir-type-list= |
-| =(or null <type>)=               | ={"anyOf":[{...},{"type":"null"}]}= | =ir-type-nullable= |
-| A CLOS class name                | Nested object       | =ir-type-object=   |
+| CL type specifier | JSON Schema                       | IR type           |
+|-------------------+-----------------------------------+-------------------|
+| =string=            | ={"type":"string"}=                 | =ir-type-primitive= |
+| =integer=, =fixnum=   | ={"type":"integer"}=                | =ir-type-primitive= |
+| =float=, =number=     | ={"type":"number"}=                 | =ir-type-primitive= |
+| =boolean=           | ={"type":"boolean"}=                | =ir-type-primitive= |
+| =(member :a :b :c)= | ={"enum":["a","b","c"]}=            | =ir-type-enum=      |
+| =(list-of <type>)=  | ={"type":"array","items":{...}}=    | =ir-type-list=      |
+| =(or null <type>)=  | ={"anyOf":[{...},{"type":"null"}]}= | =ir-type-nullable=  |
+| A CLOS class name | Nested object                     | =ir-type-object=    |
+
+Only the type specifiers above are supported. Unsupported specifiers (e.g.
+hash tables, alists, =satisfies=) signal a =schema-error=. =list-of= is a
+custom compound type provided by this library, not a standard CL specifier.
 
 * API
 
 ** Core
 
-- =compile-extractor (class &key mode slot-list slot-types user-prompt)= — pre-compile the extraction pipeline.
+- =compile-extractor (class &key mode slot-list slot-types user-prompt)= — pre-compile the extraction pipeline. Returns a reusable =extraction-compilation= with a cached IR schema and system prompt.
 - =extract (backend compilation-or-class document &key max-retries temperature max-tokens user-prompt)= — extract a single instance.
 - =extract-list (backend compilation-or-class document &key ...)= — extract multiple instances.
 - =class-to-schema (class &key mode slot-list slot-types)= — introspect a class into an IR schema.
@@ -122,6 +132,11 @@ Implement two generic functions to add a new backend:
   ...)
 #+end_src
 
+=backend-generate= must return an =extraction-result= (a struct) with at least
+=:raw-response= (the LLM's raw string) and =:raw-data= (parsed data, typically
+an alist). The core fills in =:instance=, =:retries=, and =:usage= after
+validation and construction.
+
 ** llama.cpp backend
 
 #+begin_src lisp
@@ -129,17 +144,30 @@ Implement two generic functions to add a new backend:
 #+end_src
 
 Uses grammar-constrained generation — the model is forced to produce JSON
-matching the schema. No post-hoc parsing failures.
+matching the schema, eliminating post-hoc parsing failures.
 
 * Extraction modes
 
 =class-to-schema= and =compile-extractor= accept a =:mode= keyword:
 
-| Mode        | Behavior                                        |
-|-------------+-------------------------------------------------|
-| =:full=     | All slots (default)                              |
-| =:required= | Only slots with =:initarg= and no =:initform=   |
-| =:custom=   | Only slots listed in =:slot-list=                |
+| Mode      | Behavior                                  |
+|-----------+-------------------------------------------|
+| =:full=     | All slots (default)                       |
+| =:required= | Only slots with =:initarg= and no =:initform= |
+| =:custom=   | Only slots listed in =:slot-list=           |
+
+* Design principles
+
+- *Typed output.* The result is always a real CLOS instance — =typep=,
+  accessors, and =slot-value= work. No hash tables or plists to destructure.
+- *Grammar before validation.* Constrained decoding prevents malformed JSON at
+  generation time. Validation is a safety net for semantic errors, not the
+  primary correctness mechanism.
+- *IR separation.* Backends receive a backend-agnostic intermediate
+  representation, never MOP internals. Adding a new LLM backend requires two
+  generic functions, not knowledge of the introspection layer.
+- *Ordinary classes.* No special metaclass or macro. Define a standard CLOS
+  class with types on its slots and the library introspects it.
 
 * Running the example
 
