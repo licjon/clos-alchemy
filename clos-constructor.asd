@@ -34,6 +34,7 @@
                  (:file "construction")
                  (:file "prompt")
                  (:file "json-parse")
+                 (:file "extract")
                  (:file "security")
                  (:file "unsupported-types"))))
   :perform (test-op (op c) (symbol-call :rove :run c)))
