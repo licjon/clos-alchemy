@@ -177,18 +177,61 @@ matching the schema, eliminating post-hoc parsing failures.
 - *Ordinary classes.* No special metaclass or macro. Define a standard CLOS
   class with types on its slots and the library introspects it.
 
-* Running the example
+* Examples
+
+Set the model path once, then run either example:
 
 #+begin_src lisp
 (ql:quickload :clos-constructor/examples)
+#+end_src
 
+Or set the environment variable =LLAMA_MODEL= before starting the Lisp image.
+
+** Extraction (=extract-llama=)
+
+Single extraction, list extraction, and nested classes.
+
+#+begin_src lisp
 (setf clos-constructor/examples/extract-llama::*model-path*
       "/path/to/model.gguf")
 
 (clos-constructor/examples/extract-llama:run)
 #+end_src
 
-Or set the environment variable =LLAMA_MODEL= before starting the Lisp image.
+** Zero-shot structured classifier (=classify-llama=)
+
+Classifies support tickets by urgency, category, and sentiment using
+enum-typed slots. The grammar constraint forces the LLM to pick from the
+allowed values — no training data, no string matching, no post-processing.
+
+#+begin_src lisp
+(defclass ticket-classification ()
+  ((urgency   :type (member :low :medium :high :critical) ...)
+   (category  :type (member :billing :technical :account :general) ...)
+   (sentiment :type (member :positive :negative :neutral) ...)
+   (reason    :type string ...)))
+#+end_src
+
+#+begin_src lisp
+(setf clos-constructor/examples/classify-llama::*model-path*
+      "/path/to/model.gguf")
+
+(clos-constructor/examples/classify-llama:run)
+#+end_src
+
+Example output:
+
+#+begin_example
+── Ticket 1 ──
+  I've been charged twice for my subscription this month. This is
+  the third time this has happened and I'm really frustrated.
+
+  Urgency:   HIGH
+  Category:  BILLING
+  Sentiment: NEGATIVE
+  Reason:    "Charged twice for subscription, third occurrence"
+  Retries:   0
+#+end_example
 
 * Running tests
 
