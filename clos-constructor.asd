@@ -43,7 +43,8 @@
   :depends-on ("clos-constructor/llama")
   :components ((:module "examples"
                 :components
-                ((:file "extract-llama")))))
+                ((:file "extract-llama")
+                 (:file "classify-llama")))))
 
 (defsystem "clos-constructor/llama"
   :description "llama.cpp backend for clos-constructor using grammar-constrained generation"
