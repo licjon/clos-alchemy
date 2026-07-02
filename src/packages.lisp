@@ -46,9 +46,12 @@
    #:generation-error #:generation-error-backend #:generation-error-reason
    #:max-retries-error #:max-retries-error-retries #:max-retries-error-errors
 
+   ;; Metaclass
+   #:constructor-class
+   #:slot-definition-list-of
+
    ;; Type mapping
    #:cl-type-to-ir-type
-   #:list-of
 
    ;; Introspection
    #:class-to-schema

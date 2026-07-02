@@ -1,9 +1,5 @@
 (in-package #:clos-constructor)
 
-(deftype list-of (element-type)
-  (declare (ignore element-type))
-  'list)
-
 (defun cl-type-to-ir-type (type-spec &key schema-cache slot-types)
   "Translate a CL type specifier to an IR type node.
 SCHEMA-CACHE prevents infinite recursion for mutually-referencing classes.
@@ -40,8 +36,6 @@ SLOT-TYPES is unused here (consumed by class-to-schema before calling this)."
        (%map-member-type (rest spec)))
       (or
        (%map-or-type (rest spec) cache))
-      (list-of
-       (%map-list-of-type (second spec) cache))
       (t
        (make-ir-type-primitive :kind :string)))))
 
@@ -70,10 +64,6 @@ SLOT-TYPES is unused here (consumed by class-to-schema before calling this)."
       (t
        (make-ir-type-nullable
         :inner-type (make-ir-type-primitive :kind :string))))))
-
-(defun %map-list-of-type (element-spec cache)
-  "Map (list-of X) to ir-type-list."
-  (make-ir-type-list :element-type (%map-type element-spec cache)))
 
 (defun %map-named-type (spec cache)
   (cond

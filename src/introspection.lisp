@@ -42,11 +42,16 @@ SLOT-TYPES: alist of (slot-name . type-spec) overrides for MOP-reported types."
   "Convert a MOP slot definition to an ir-field."
   (let* ((slot-name (closer-mop:slot-definition-name slot))
          (type-spec (%effective-type slot slot-name slot-types))
+         (list-of-element (%slot-list-of-element slot slot-name slot-types))
          (initargs (closer-mop:slot-definition-initargs slot))
          (has-initform (not (null (closer-mop:slot-definition-initfunction slot))))
          (required-p (and (not (null initargs))
                           (not has-initform)))
-         (ir-type (cl-type-to-ir-type type-spec :schema-cache cache))
+         (ir-type (if list-of-element
+                      (make-ir-type-list
+                       :element-type (cl-type-to-ir-type list-of-element
+                                                         :schema-cache cache))
+                      (cl-type-to-ir-type type-spec :schema-cache cache)))
          (nullable-p (ir-type-nullable-p ir-type)))
     (make-ir-field :name (lisp-name-to-json-name slot-name)
                    :type ir-type
@@ -60,6 +65,13 @@ SLOT-TYPES: alist of (slot-name . type-spec) overrides for MOP-reported types."
     (if override
         (cdr override)
         (closer-mop:slot-definition-type slot))))
+
+(defun %slot-list-of-element (slot slot-name slot-types)
+  "Return the :list-of element type if present, nil otherwise.
+Slot-types overrides take precedence (no :list-of in that path)."
+  (when (and (not (assoc slot-name slot-types))
+             (typep slot 'constructor-effective-slot-definition))
+    (slot-definition-list-of slot)))
 
 (defun %include-slot-p (slot field mode slot-list)
   "Determine whether a slot should be included based on extraction mode."

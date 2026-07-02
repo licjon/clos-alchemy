@@ -10,12 +10,13 @@ constructs and returns typed instances with working accessors.
 * Quick start
 
 #+begin_src lisp
-;; 1. Define a class — just a normal CLOS class
+;; 1. Define a class
 (defclass person ()
   ((name    :initarg :name    :accessor person-name    :type string)
    (age     :initarg :age     :accessor person-age     :type integer)
    (email   :initarg :email   :accessor person-email   :type (or null string))
-   (hobbies :initarg :hobbies :accessor person-hobbies :type (list-of string))))
+   (hobbies :initarg :hobbies :accessor person-hobbies :type list :list-of string))
+  (:metaclass clos-constructor:constructor-class))
 
 ;; 2. Extract from text
 (let* ((backend (clos-constructor/llama:make-llama-backend
@@ -98,15 +99,16 @@ Type specifiers on CLOS slots map to JSON Schema types:
 | =float=, =number=     | ={"type":"number"}=                 | =ir-type-primitive= |
 | =boolean=           | ={"type":"boolean"}=                | =ir-type-primitive= |
 | =(member :a :b :c)= | ={"enum":["a","b","c"]}=            | =ir-type-enum=      |
-| =(list-of <type>)=  | ={"type":"array","items":{...}}=    | =ir-type-list=      |
+| =:list-of <type>=   | ={"type":"array","items":{...}}=    | =ir-type-list=      |
 | =(or null <type>)=  | ={"anyOf":[{...},{"type":"null"}]}= | =ir-type-nullable=  |
 | A CLOS class name | Nested object                     | =ir-type-object=    |
 
-Only the type specifiers above are supported. =list-of= is a custom compound
-type provided by this library because standard CL has no parameterised list
-type — =list= carries no element type, so there is no way to tell the schema
-layer what kind of items the array should contain. All elements must be the
-same type; mixed-type arrays (e.g. =["alice", 32, true]=) are not supported.
+Only the type specifiers above are supported. =:list-of= is a custom slot
+option available on classes with =(:metaclass constructor-class)=. Standard CL
+has no parameterised list type — =list= carries no element type, so =:list-of=
+tells the schema layer what kind of items the array should contain. All
+elements must be the same type; mixed-type arrays (e.g. =["alice", 32, true]=)
+are not supported.
 
 Unsupported named types (=hash-table=, =symbol=, =keyword=, =character=,
 =pathname=) signal a =schema-error=. Unsupported compound specifiers
@@ -174,8 +176,9 @@ matching the schema, eliminating post-hoc parsing failures.
 - *IR separation.* Backends receive a backend-agnostic intermediate
   representation, never MOP internals. Adding a new LLM backend requires two
   generic functions, not knowledge of the introspection layer.
-- *Ordinary classes.* No special metaclass or macro. Define a standard CLOS
-  class with types on its slots and the library introspects it.
+- *Ordinary classes.* Define a CLOS class with types on its slots and the
+  library introspects it. Use =constructor-class= as the metaclass when you
+  need =:list-of= for typed arrays.
 
 * Examples
 

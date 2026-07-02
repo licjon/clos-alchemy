@@ -12,6 +12,7 @@
                  (:file "conditions")
                  (:file "ir")
                  (:file "type-mapping")
+                 (:file "metaclass")
                  (:file "introspection")
                  (:file "json-schema")
                  (:file "validation")
@@ -28,6 +29,7 @@
                 :components
                 ((:file "ir")
                  (:file "type-mapping")
+                 (:file "metaclass")
                  (:file "introspection")
                  (:file "json-schema")
                  (:file "validation")

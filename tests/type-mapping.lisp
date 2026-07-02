@@ -81,17 +81,6 @@
     (ok (ir-type-primitive-p (ir-type-list-element-type ir)))
     (ok (eq :string (ir-type-primitive-kind (ir-type-list-element-type ir))))))
 
-(deftest list-of-strings
-  (let ((ir (cl-type-to-ir-type '(list-of string))))
-    (ok (ir-type-list-p ir))
-    (ok (ir-type-primitive-p (ir-type-list-element-type ir)))
-    (ok (eq :string (ir-type-primitive-kind (ir-type-list-element-type ir))))))
-
-(deftest list-of-integers
-  (let ((ir (cl-type-to-ir-type '(list-of integer))))
-    (ok (ir-type-list-p ir))
-    (ok (eq :integer (ir-type-primitive-kind (ir-type-list-element-type ir))))))
-
 ;;; CLOS class references
 
 (defclass test-address ()

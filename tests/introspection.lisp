@@ -97,13 +97,11 @@
 
 (deftest slot-type-override
   (let* ((schema (class-to-schema 'invoice
-                                  :slot-types '((items . (list-of string)))))
+                                  :slot-types '((total . boolean))))
          (fields (ir-schema-fields schema))
-         (items-f (find "items" fields :key #'ir-field-name :test #'string=)))
-    (ok (ir-type-list-p (ir-field-type items-f)))
-    (ok (ir-type-primitive-p (ir-type-list-element-type (ir-field-type items-f))))
-    (ok (eq :string (ir-type-primitive-kind
-                     (ir-type-list-element-type (ir-field-type items-f)))))))
+         (total-f (find "total" fields :key #'ir-field-name :test #'string=)))
+    (ok (ir-type-primitive-p (ir-field-type total-f)))
+    (ok (eq :boolean (ir-type-primitive-kind (ir-field-type total-f))))))
 
 ;;; Schema caching prevents duplicate work
 

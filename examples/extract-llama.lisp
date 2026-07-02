@@ -33,7 +33,8 @@
   ((name    :initarg :name    :accessor person-name    :type string)
    (age     :initarg :age     :accessor person-age     :type integer)
    (email   :initarg :email   :accessor person-email   :type (or null string))
-   (hobbies :initarg :hobbies :accessor person-hobbies :type (list-of string)))
+   (hobbies :initarg :hobbies :accessor person-hobbies :type list :list-of string))
+  (:metaclass clos-constructor:constructor-class)
   (:documentation "A person with contact info and hobbies."))
 
 (defclass address ()
