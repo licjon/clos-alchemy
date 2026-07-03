@@ -149,6 +149,28 @@
            (result (extract backend 'item "text")))
       (ok (typep (extraction-result-instance result) 'item)))))
 
+(deftest extract-list-returns-list-of-instances
+  (testing "the instance slot is the list itself, not the items wrapper"
+    (let* ((raw "{\"items\":[{\"name\":\"widget\",\"count\":5},{\"name\":\"gadget\",\"count\":2}]}")
+           (backend (make-mock-backend
+                     :responses (list (list raw (parse-json-response raw)))))
+           (result (extract-list backend 'item "text"))
+           (instances (extraction-result-instance result)))
+      (ok (listp instances))
+      (ok (= 2 (length instances)))
+      (ok (every (lambda (i) (typep i 'item)) instances))
+      (ok (string= "widget" (item-name (first instances))))
+      (ok (= 2 (item-count (second instances)))))))
+
+(deftest extract-list-with-no-matches-returns-empty-list
+  (testing "an empty items array is valid and yields nil, not a validation failure"
+    (let* ((raw "{\"items\":[]}")
+           (backend (make-mock-backend
+                     :responses (list (list raw (parse-json-response raw)))))
+           (result (extract-list backend 'item "text")))
+      (ok (null (extraction-result-instance result)))
+      (ok (= 0 (extraction-result-retries result))))))
+
 (deftest pre-compiled-extractor-works
   (testing "compile-extractor result can be reused across calls"
     (let* ((compilation (compile-extractor 'item))

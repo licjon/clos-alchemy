@@ -22,6 +22,9 @@ Returns (values valid-p error-list). Errors are collected, not signaled."
                              :actual "missing")))
       ;; Missing optional field — ok
       ((not present-p) nil)
+      ;; Empty array — nil and the empty list are the same object in CL
+      ((and (null value) (ir-type-list-p (ir-field-type field)))
+       nil)
       ;; Null value
       ((null value)
        (if (ir-field-nullable-p field)

@@ -50,13 +50,9 @@ Returns an extraction-result whose instance slot is a list."
                                             (extraction-compilation-prompt compilation)))))
     (let ((result (%extract-with-retry backend list-compilation document
                                        max-retries temperature max-tokens user-prompt)))
-      (when result
-        (make-extraction-result
-         :instance (extraction-result-instance result)
-         :raw-data (extraction-result-raw-data result)
-         :raw-response (extraction-result-raw-response result)
-         :retries (extraction-result-retries result)
-         :usage (extraction-result-usage result))))))
+      (setf (extraction-result-instance result)
+            (gethash "items" (extraction-result-instance result)))
+      result)))
 
 (defun %extract-with-retry (backend compilation document
                             max-retries temperature max-tokens user-prompt)

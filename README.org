@@ -122,7 +122,7 @@ silently — use =:slot-types= overrides to map these explicitly.
 
 - =compile-extractor (class &key mode slot-list slot-types user-prompt)= — pre-compile the extraction pipeline. Returns a reusable =extraction-compilation= with a cached IR schema and system prompt.
 - =extract (backend compilation-or-class document &key max-retries temperature max-tokens user-prompt)= — extract a single instance.
-- =extract-list (backend compilation-or-class document &key ...)= — extract multiple instances.
+- =extract-list (backend compilation-or-class document &key ...)= — extract multiple instances; the result's instance slot is a list (possibly empty).
 - =class-to-schema (class &key mode slot-list slot-types)= — introspect a class into an IR schema.
 - =schema-to-json-schema (schema)= — convert an IR schema to a JSON Schema hash table.
 
