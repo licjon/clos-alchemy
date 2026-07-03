@@ -9,7 +9,9 @@
   (values nil :type list))
 
 (defstruct (ir-type-list (:copier nil))
-  (element-type nil))
+  (element-type nil)
+  ;; :list or :vector — which CL sequence construction should produce
+  (container :list :type (member :list :vector)))
 
 (defstruct (ir-type-object (:copier nil))
   (schema nil))
@@ -24,7 +26,9 @@
   (type nil)
   (required-p t :type boolean)
   (nullable-p nil :type boolean)
-  (slot-name nil :type (or symbol null)))
+  (slot-name nil :type (or symbol null))
+  (initarg nil :type (or symbol null))
+  (description nil :type (or string null)))
 
 ;;; Schema — top-level extraction target
 

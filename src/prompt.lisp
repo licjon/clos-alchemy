@@ -18,7 +18,18 @@ USER-PROMPT appends domain-specific context if provided."
           (ir-field-name field)
           (%type-label (ir-field-type field))
           (if (ir-field-required-p field) ", required" ", optional")
-          (%type-hint (ir-field-type field))))
+          (%field-hint field)))
+
+(defun %field-hint (field)
+  "The slot's :documentation when present, else a generic type hint.
+Enum fields always keep their allowed values visible."
+  (let ((desc (ir-field-description field))
+        (type (ir-field-type field)))
+    (cond
+      ((and desc (ir-type-enum-p type))
+       (format nil "~A — ~A" desc (%type-hint type)))
+      (desc desc)
+      (t (%type-hint type)))))
 
 (defun %type-label (ir-type)
   (etypecase ir-type

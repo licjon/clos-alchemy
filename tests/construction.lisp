@@ -189,3 +189,40 @@
          (instance (construct-from-data data schema)))
     (ok (integerp (person-age instance)))
     (ok (= 30 (person-age instance)))))
+
+;;; Initarg handling — declared initargs and initarg-less slots
+
+(defclass renamed-initarg ()
+  ((name :initarg :the-name :accessor renamed-name :type string)))
+
+(deftest construction-uses-declared-initarg
+  (testing "a slot whose initarg differs from its name constructs correctly"
+    (let* ((schema (class-to-schema 'renamed-initarg))
+           (data (make-data "name" "Alice"))
+           (instance (construct-from-data data schema)))
+      (ok (typep instance 'renamed-initarg))
+      (ok (string= "Alice" (renamed-name instance))))))
+
+(defclass initarg-less ()
+  ((name :initarg :name :accessor il-name :type string)
+   (notes :accessor il-notes :type string)))
+
+(deftest construction-sets-slot-without-initarg
+  (testing "a slot with no initarg is set via slot-value after make-instance"
+    (let* ((schema (class-to-schema 'initarg-less))
+           (data (make-data "name" "Bob" "notes" "from the LLM"))
+           (instance (construct-from-data data schema)))
+      (ok (string= "Bob" (il-name instance)))
+      (ok (string= "from the LLM" (il-notes instance))))))
+
+;;; Vector-typed slots receive CL vectors, not lists
+
+(defclass tagged-thing ()
+  ((tags :initarg :tags :accessor tagged-thing-tags :type (vector string))))
+
+(deftest vector-slot-coerces-to-vector
+  (let* ((schema (class-to-schema 'tagged-thing))
+         (data (make-data "tags" (list "a" "b")))
+         (instance (construct-from-data data schema)))
+    (ok (vectorp (tagged-thing-tags instance)))
+    (ok (equalp #("a" "b") (tagged-thing-tags instance)))))

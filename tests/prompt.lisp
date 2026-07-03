@@ -51,3 +51,31 @@
   (let ((prompt (generate-system-prompt (person-schema)
                                         :user-prompt "This is a medical record.")))
     (ok (search "medical record" prompt))))
+
+;;; Field descriptions flow into the system prompt
+
+(deftest prompt-includes-field-descriptions
+  (let* ((schema (make-ir-schema
+                  :name "person"
+                  :fields (list
+                           (make-ir-field :name "name"
+                                          :type (make-ir-type-primitive :kind :string)
+                                          :required-p t
+                                          :slot-name 'name
+                                          :description "Full legal name"))))
+         (prompt (generate-system-prompt schema)))
+    (ok (search "Full legal name" prompt))))
+
+(deftest prompt-keeps-enum-values-alongside-description
+  (let* ((schema (make-ir-schema
+                  :name "ticket"
+                  :fields (list
+                           (make-ir-field :name "urgency"
+                                          :type (make-ir-type-enum :values '("low" "high"))
+                                          :required-p t
+                                          :slot-name 'urgency
+                                          :description "How urgent the ticket is"))))
+         (prompt (generate-system-prompt schema)))
+    (ok (search "How urgent the ticket is" prompt))
+    (ok (search "\"low\"" prompt))
+    (ok (search "\"high\"" prompt))))

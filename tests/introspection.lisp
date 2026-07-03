@@ -112,3 +112,32 @@
     (let ((s1 (class-to-schema 'address :schema-cache cache))
           (s2 (gethash 'address cache)))
       (ok (eq s1 s2)))))
+
+;;; Initargs are recorded on fields
+
+(defclass initarg-holder ()
+  ((name :initarg :the-name :type string)
+   (bare :type string)))
+
+(deftest fields-record-slot-initargs
+  (let* ((schema (class-to-schema 'initarg-holder))
+         (fields (ir-schema-fields schema))
+         (name-f (find "name" fields :key #'ir-field-name :test #'string=))
+         (bare-f (find "bare" fields :key #'ir-field-name :test #'string=)))
+    (ok (eq :the-name (ir-field-initarg name-f)))
+    (ok (null (ir-field-initarg bare-f)))))
+
+;;; Slot :documentation becomes the field description
+
+(defclass documented ()
+  ((name :initarg :name :type string
+         :documentation "The person's full legal name")
+   (age :initarg :age :type integer)))
+
+(deftest fields-record-slot-documentation
+  (let* ((schema (class-to-schema 'documented))
+         (fields (ir-schema-fields schema))
+         (name-f (find "name" fields :key #'ir-field-name :test #'string=))
+         (age-f (find "age" fields :key #'ir-field-name :test #'string=)))
+    (ok (string= "The person's full legal name" (ir-field-description name-f)))
+    (ok (null (ir-field-description age-f)))))

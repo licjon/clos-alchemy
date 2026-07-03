@@ -92,29 +92,47 @@ schema validation failure, not grammar failure.
 
 Type specifiers on CLOS slots map to JSON Schema types:
 
-| CL type specifier | JSON Schema                       | IR type           |
-|-------------------+-----------------------------------+-------------------|
-| =string=            | ={"type":"string"}=                 | =ir-type-primitive= |
-| =integer=, =fixnum=   | ={"type":"integer"}=                | =ir-type-primitive= |
-| =float=, =number=     | ={"type":"number"}=                 | =ir-type-primitive= |
-| =boolean=           | ={"type":"boolean"}=                | =ir-type-primitive= |
-| =(member :a :b :c)= | ={"enum":["a","b","c"]}=            | =ir-type-enum=      |
-| =:list-of <type>=   | ={"type":"array","items":{...}}=    | =ir-type-list=      |
-| =(or null <type>)=  | ={"anyOf":[{...},{"type":"null"}]}= | =ir-type-nullable=  |
-| A CLOS class name | Nested object                     | =ir-type-object=    |
+| CL type specifier                  | JSON Schema                       | IR type           |
+|------------------------------------+-----------------------------------+-------------------|
+| =string=, =(string N)=                 | ={"type":"string"}=                 | =ir-type-primitive= |
+| =integer=, =fixnum=, =(integer lo hi)=   | ={"type":"integer"}=                | =ir-type-primitive= |
+| =(unsigned-byte N)=, =(mod N)=         | ={"type":"integer"}=                | =ir-type-primitive= |
+| =float=, =number=, =(float lo hi)=, =real= | ={"type":"number"}=                 | =ir-type-primitive= |
+| =boolean=                            | ={"type":"boolean"}=                | =ir-type-primitive= |
+| =(member :a :b :c)=                  | ={"enum":["a","b","c"]}=            | =ir-type-enum=      |
+| =:list-of <type>=                    | ={"type":"array","items":{...}}=    | =ir-type-list=      |
+| =(vector <type>)=, =(array <type>)=    | ={"type":"array","items":{...}}=    | =ir-type-list=      |
+| =(or null <type>)=                   | ={"anyOf":[{...},{"type":"null"}]}= | =ir-type-nullable=  |
+| A CLOS class name                  | Nested object                     | =ir-type-object=    |
 
-Only the type specifiers above are supported. =:list-of= is a custom slot
-option available on classes with =(:metaclass constructor-class)=. Standard CL
-has no parameterised list type — =list= carries no element type, so =:list-of=
-tells the schema layer what kind of items the array should contain. All
-elements must be the same type; mixed-type arrays (e.g. =["alice", 32, true]=)
-are not supported.
+=:list-of= is a custom slot option available on classes with
+=(:metaclass constructor-class)=. Standard CL has no parameterised list type —
+=list= carries no element type, so =:list-of= tells the schema layer what kind
+of items the array should contain. Slots typed =(vector <type>)= or
+=(array <type>)= receive a CL vector; =list= and =:list-of= slots receive a
+list. All elements must be the same type; mixed-type arrays
+(e.g. =["alice", 32, true]=) are not supported.
 
-Unsupported named types (=hash-table=, =symbol=, =keyword=, =character=,
-=pathname=) signal a =schema-error=. Unsupported compound specifiers
-(=(vector ...)=, =(array ...)=, =(unsigned-byte N)=, =(satisfies ...)=,
-=(complex ...)=, =(cons ...)=, =(values ...)=) currently fall back to =string=
-silently — use =:slot-types= overrides to map these explicitly.
+Any other type specifier signals a =schema-error= — named types with no JSON
+analogue (=hash-table=, =symbol=, =keyword=, =character=, =pathname=) and
+compound specifiers that can't be mapped (=(satisfies ...)=, =(complex ...)=,
+=(cons ...)=, =(values ...)=). Nothing falls back to =string= silently; use
+=:slot-types= overrides to map exotic types explicitly.
+
+* Field descriptions
+
+Slot =:documentation= flows into the JSON Schema (as =description=) and the
+generated system prompt, so the model sees what each field means:
+
+#+begin_src lisp
+(defclass person ()
+  ((name :initarg :name :type string
+         :documentation "The person's full legal name")))
+#+end_src
+
+Descriptions materially improve extraction quality on ambiguous fields — prefer
+them over relying on slot names alone. Enum fields keep their allowed values
+visible in the prompt alongside the description.
 
 * API
 

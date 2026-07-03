@@ -145,3 +145,23 @@
          (parsed (yason:parse json-string)))
     (ok (string= "object" (ht-get parsed "type")))
     (ok (hash-table-p (ht-get parsed "properties")))))
+
+;;; Field descriptions flow into the JSON Schema
+
+(deftest field-descriptions-emitted
+  (let* ((schema (make-ir-schema
+                  :name "person"
+                  :fields (list
+                           (make-ir-field :name "name"
+                                          :type (make-ir-type-primitive :kind :string)
+                                          :required-p t
+                                          :slot-name 'name
+                                          :description "Full legal name")
+                           (make-ir-field :name "age"
+                                          :type (make-ir-type-primitive :kind :integer)
+                                          :required-p t
+                                          :slot-name 'age))))
+         (js (schema-to-json-schema schema))
+         (props (gethash "properties" js)))
+    (ok (string= "Full legal name" (gethash "description" (gethash "name" props))))
+    (ok (null (nth-value 1 (gethash "description" (gethash "age" props)))))))

@@ -57,7 +57,9 @@ SLOT-TYPES: alist of (slot-name . type-spec) overrides for MOP-reported types."
                    :type ir-type
                    :required-p required-p
                    :nullable-p nullable-p
-                   :slot-name slot-name)))
+                   :slot-name slot-name
+                   :initarg (first initargs)
+                   :description (documentation slot t))))
 
 (defun %effective-type (slot slot-name slot-types)
   "Get the effective type for a slot, checking overrides first."

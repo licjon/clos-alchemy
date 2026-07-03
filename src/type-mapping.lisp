@@ -30,14 +30,29 @@ SLOT-TYPES is unused here (consumed by class-to-schema before calling this)."
      (make-ir-type-primitive :kind :string))))
 
 (defun %map-compound-type (spec cache)
-  (let ((head (first spec)))
+  (let ((head (first spec))
+        (args (rest spec)))
     (case head
       (member
-       (%map-member-type (rest spec)))
+       (%map-member-type args))
       (or
-       (%map-or-type (rest spec) cache))
+       (%map-or-type args cache))
+      ((vector array simple-vector simple-array)
+       (make-ir-type-list
+        :element-type (if (and (first args) (not (eq (first args) '*)))
+                          (%map-type (first args) cache)
+                          (make-ir-type-primitive :kind :string))
+        :container :vector))
+      ((integer unsigned-byte signed-byte mod)
+       (make-ir-type-primitive :kind :integer))
+      ((float single-float double-float short-float long-float real rational)
+       (make-ir-type-primitive :kind :number))
+      ((string base-string simple-string simple-base-string)
+       (make-ir-type-primitive :kind :string))
       (t
-       (make-ir-type-primitive :kind :string)))))
+       (error 'schema-error
+              :class-name spec
+              :reason (format nil "unsupported compound type specifier: ~S" spec))))))
 
 (defun %map-member-type (members)
   "Map (member :a :b :c) or (member \"x\" \"y\") to ir-type-enum."
@@ -72,8 +87,7 @@ SLOT-TYPES is unused here (consumed by class-to-schema before calling this)."
      (make-ir-type-primitive :kind :string))
 
     ;; Integer types
-    ((member spec '(integer fixnum bignum bit
-                    (unsigned-byte 8) (unsigned-byte 16) (unsigned-byte 32)))
+    ((member spec '(integer fixnum bignum bit unsigned-byte signed-byte))
      (make-ir-type-primitive :kind :integer))
 
     ;; Float/number types
@@ -89,6 +103,12 @@ SLOT-TYPES is unused here (consumed by class-to-schema before calling this)."
     ((member spec '(list cons sequence))
      (make-ir-type-list
       :element-type (make-ir-type-primitive :kind :string)))
+
+    ;; Plain vector without element type
+    ((member spec '(vector simple-vector))
+     (make-ir-type-list
+      :element-type (make-ir-type-primitive :kind :string)
+      :container :vector))
 
     ;; Try as a CLOS class reference
     (t

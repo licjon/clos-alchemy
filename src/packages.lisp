@@ -7,6 +7,7 @@
    #:ir-type-enum #:ir-type-enum-p #:ir-type-enum-values
    #:make-ir-type-enum
    #:ir-type-list #:ir-type-list-p #:ir-type-list-element-type
+   #:ir-type-list-container
    #:make-ir-type-list
    #:ir-type-object #:ir-type-object-p #:ir-type-object-schema
    #:make-ir-type-object
@@ -16,7 +17,8 @@
    ;; IR field and schema
    #:ir-field #:ir-field-p
    #:ir-field-name #:ir-field-type #:ir-field-required-p
-   #:ir-field-nullable-p #:ir-field-slot-name
+   #:ir-field-nullable-p #:ir-field-slot-name #:ir-field-initarg
+   #:ir-field-description
    #:make-ir-field
    #:ir-schema #:ir-schema-p
    #:ir-schema-name #:ir-schema-description #:ir-schema-fields
