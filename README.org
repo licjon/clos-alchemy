@@ -18,7 +18,7 @@ constructs and returns typed instances with working accessors.
    (hobbies :initarg :hobbies :accessor person-hobbies :type list)))
 
 ;; 2. Extract from text
-(let* ((backend (clos-constructor/llama:make-llama-backend
+(let* ((backend (cl-llm-backend/llama:make-llama-backend
                  :model model :context ctx))
        (result  (extract backend 'person
                   "Alice Chen is 32. Reach her at alice@example.com.
@@ -32,22 +32,21 @@ accessors work as expected.
 
 * Installation
 
-Requires [[https://github.com/jonathanhudstad/cl-llama-cpp][cl-llama-cpp]] and [[https://github.com/jonathanhudstad/cl-llama-cpp-extras][cl-llama-cpp-extras]] for the llama.cpp backend.
+Backends come from [[https://github.com/licjon/cl-llm-backend][cl-llm-backend]]; the llama.cpp backend additionally
+requires cl-llama-cpp and cl-llama-cpp-extras.
 
 #+begin_src lisp
-(ql:quickload :clos-constructor)        ; core (no LLM dependency)
-(ql:quickload :clos-constructor/llama)  ; llama.cpp backend
+(ql:quickload :clos-constructor)      ; core
+(ql:quickload :cl-llm-backend/llama)  ; llama.cpp backend
 #+end_src
 
 * Systems
 
-| System                       | Description                               | Dependencies                                  |
-|------------------------------+-------------------------------------------+-----------------------------------------------|
-| =clos-constructor=             | Core library — introspection, IR, schema  | =closer-mop=, =yason=                             |
-| =clos-constructor/llama=       | llama.cpp backend                         | =cl-llama-cpp=, =cl-llama-cpp-extras/json-schema= |
-| =clos-constructor/tests=       | Core test suite                           | =rove=                                          |
-| =clos-constructor/llama/tests= | Backend tests                             | =rove=                                          |
-| =clos-constructor/examples=    | Example programs                          | =clos-constructor/llama=                        |
+| System                    | Description                              | Dependencies                        |
+|---------------------------+------------------------------------------+-------------------------------------|
+| =clos-constructor=          | Core library — introspection, IR, schema | =closer-mop=, =yason=, =cl-llm-backend= |
+| =clos-constructor/tests=    | Core test suite                          | =rove=                                |
+| =clos-constructor/examples= | Example programs                         | =clos-constructor=, =cl-llm-backend/llama= |
 
 * How it works
 
@@ -152,36 +151,20 @@ visible in the prompt alongside the description.
 - =class-to-schema (class &key mode slot-list slot-types)= — introspect a class into an IR schema.
 - =schema-to-json-schema (schema)= — convert an IR schema to a JSON Schema hash table.
 
-** Backend protocol
+** Backends
 
-Implement two generic functions to add a new backend:
-
-#+begin_src lisp
-(defmethod backend-output-schema ((backend my-backend) schema)
-  ;; Return the output schema representation for this backend
-  ...)
-
-(defmethod backend-generate ((backend my-backend) schema document
-                             &key model temperature max-tokens
-                                  system-prompt user-prompt)
-  ;; Call the LLM, return an extraction-result with :raw-response and :raw-data
-  ...)
-#+end_src
-
-=backend-generate= must return an =extraction-result= (a struct) with at least
-=:raw-response= (the LLM's raw string) and =:raw-data= (parsed data as nested
-hash tables — =parse-json-response= produces the right shape). The core fills
-in =:instance=, =:retries=, and =:usage= after validation and construction.
-
-In =:raw-data=, JSON booleans must be =:true=/=:false= (or =t=), and JSON null
-is =nil= — =nil= means null, never false. =parse-json-response= follows this
-convention automatically; hand-rolled backends must too, or false booleans
-become indistinguishable from null.
+Backends implement the [[https://github.com/licjon/cl-llm-backend][cl-llm-backend]] protocol; =extract= works with any
+backend that supports structured output (=:output-schema=). To add one,
+specialize =llm:backend-generate= on your class and declare
+=llm:backend-supports-structured-output-p= true — see the cl-llm-backend
+README. The core builds the messages, passes the JSON Schema via
+=:output-schema=, and parses the returned text itself
+(=parse-json-response=).
 
 ** llama.cpp backend
 
 #+begin_src lisp
-(clos-constructor/llama:make-llama-backend :model model :context ctx)
+(cl-llm-backend/llama:make-llama-backend :model model :context ctx)
 #+end_src
 
 Uses grammar-constrained generation — the model is forced to produce JSON

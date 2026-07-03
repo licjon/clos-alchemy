@@ -149,7 +149,7 @@ Portland, Oregon."))
          (format *error-output* "~a" text))))
     (cl-llama-cpp:with-model (model model-path :n-gpu-layers n-gpu-layers)
       (cl-llama-cpp:with-context (ctx model :n-ctx n-ctx)
-        (let ((backend (clos-constructor/llama:make-llama-backend
+        (let ((backend (cl-llm-backend/llama:make-llama-backend
                         :model model :context ctx)))
           (demo-single-extraction backend)
           (demo-list-extraction backend)

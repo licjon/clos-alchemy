@@ -74,10 +74,6 @@
    ;; JSON parsing
    #:parse-json-response
 
-   ;; Backend protocol
-   #:backend-output-schema
-   #:backend-generate
-
    ;; Top-level API
    #:compile-extractor
    #:extract

@@ -1,32 +1,13 @@
 (defpackage #:clos-constructor/tests/extract
-  (:use #:cl #:rove #:clos-constructor))
+  (:use #:cl #:rove #:clos-constructor)
+  (:import-from #:cl-llm-backend
+                #:make-mock-backend #:mock-backend-calls))
 
 (in-package #:clos-constructor/tests/extract)
 
-;;; ── Mock backend ──────────────────────────────────────────────────
-;;;
-;;; Returns canned responses from a list.  Each call to backend-generate
-;;; pops the next response.  This lets us simulate: bad data N times,
-;;; then good data.
-
-(defstruct (mock-backend (:copier nil))
-  (responses nil :type list)
-  (call-count 0 :type integer))
-
-(defmethod backend-output-schema ((backend mock-backend) schema)
-  (declare (ignore schema))
-  nil)
-
-(defmethod backend-generate ((backend mock-backend) schema document
-                             &key model temperature max-tokens
-                                  system-prompt user-prompt)
-  (declare (ignore schema document model temperature max-tokens
-                   system-prompt user-prompt))
-  (incf (mock-backend-call-count backend))
-  (let ((response (pop (mock-backend-responses backend))))
-    (make-extraction-result
-     :raw-response (first response)
-     :raw-data (second response))))
+;;; The protocol mock (cl-llm-backend) returns canned response strings;
+;;; %extract-with-retry parses them itself, so scripted responses are
+;;; plain JSON strings: bad data N times, then good data.
 
 ;;; ── Test class ────────────────────────────────────────────────────
 
@@ -34,23 +15,14 @@
   ((name  :initarg :name  :accessor item-name  :type string)
    (count :initarg :count :accessor item-count :type integer)))
 
-(defun make-data (&rest pairs)
-  (let ((ht (make-hash-table :test 'equal)))
-    (loop for (k v) on pairs by #'cddr
-          do (setf (gethash k ht) v))
-    ht))
-
 (defun good-data ()
-  (list "{\"name\":\"widget\",\"count\":5}"
-        (make-data "name" "widget" "count" 5)))
+  "{\"name\":\"widget\",\"count\":5}")
 
 (defun bad-data-wrong-type ()
-  (list "{\"name\":\"widget\",\"count\":\"five\"}"
-        (make-data "name" "widget" "count" "five")))
+  "{\"name\":\"widget\",\"count\":\"five\"}")
 
 (defun bad-data-missing-field ()
-  (list "{\"name\":\"widget\"}"
-        (make-data "name" "widget")))
+  "{\"name\":\"widget\"}")
 
 ;;; ── Tests ─────────────────────────────────────────────────────────
 
@@ -62,7 +34,7 @@
   (testing "a required boolean field whose value is false validates and constructs"
     (let* ((raw "{\"name\":\"widget\",\"active\":false}")
            (backend (make-mock-backend
-                     :responses (list (list raw (parse-json-response raw)))))
+                     :responses (list raw)))
            (result (extract backend 'flagged "text")))
       (ok (typep (extraction-result-instance result) 'flagged))
       (ok (eq nil (flagged-active (extraction-result-instance result))))
@@ -70,7 +42,7 @@
   (testing "true coerces to t"
     (let* ((raw "{\"name\":\"widget\",\"active\":true}")
            (backend (make-mock-backend
-                     :responses (list (list raw (parse-json-response raw)))))
+                     :responses (list raw)))
            (result (extract backend 'flagged "text")))
       (ok (eq t (flagged-active (extraction-result-instance result)))))))
 
@@ -81,7 +53,7 @@
     (ok (string= "widget" (item-name (extraction-result-instance result))))
     (ok (= 5 (item-count (extraction-result-instance result))))
     (ok (= 0 (extraction-result-retries result)))
-    (ok (= 1 (mock-backend-call-count backend)))))
+    (ok (= 1 (mock-backend-calls backend)))))
 
 (deftest retries-on-validation-failure-then-succeeds
   (let* ((backend (make-mock-backend
@@ -90,7 +62,7 @@
          (result (extract backend 'item "text")))
     (ok (typep (extraction-result-instance result) 'item))
     (ok (= 1 (extraction-result-retries result)))
-    (ok (= 2 (mock-backend-call-count backend)))))
+    (ok (= 2 (mock-backend-calls backend)))))
 
 (deftest retries-multiple-times-then-succeeds
   (let* ((backend (make-mock-backend
@@ -101,7 +73,7 @@
          (result (extract backend 'item "text" :max-retries 3)))
     (ok (typep (extraction-result-instance result) 'item))
     (ok (= 3 (extraction-result-retries result)))
-    (ok (= 4 (mock-backend-call-count backend)))))
+    (ok (= 4 (mock-backend-calls backend)))))
 
 (deftest signals-max-retries-error-when-exhausted
   (let ((backend (make-mock-backend
@@ -132,7 +104,7 @@
               (progn (extract backend 'item "text" :max-retries 0) nil)
             (max-retries-error (e)
               (and (= 0 (max-retries-error-retries e))
-                   (= 1 (mock-backend-call-count backend)))))))))
+                   (= 1 (mock-backend-calls backend)))))))))
 
 (deftest retries-record-correct-attempt-number
   (testing "extraction-result-retries reflects the attempt that succeeded"
@@ -153,7 +125,7 @@
   (testing "the instance slot is the list itself, not the items wrapper"
     (let* ((raw "{\"items\":[{\"name\":\"widget\",\"count\":5},{\"name\":\"gadget\",\"count\":2}]}")
            (backend (make-mock-backend
-                     :responses (list (list raw (parse-json-response raw)))))
+                     :responses (list raw)))
            (result (extract-list backend 'item "text"))
            (instances (extraction-result-instance result)))
       (ok (listp instances))
@@ -166,7 +138,7 @@
   (testing "an empty items array is valid and yields nil, not a validation failure"
     (let* ((raw "{\"items\":[]}")
            (backend (make-mock-backend
-                     :responses (list (list raw (parse-json-response raw)))))
+                     :responses (list raw)))
            (result (extract-list backend 'item "text")))
       (ok (null (extraction-result-instance result)))
       (ok (= 0 (extraction-result-retries result))))))
@@ -180,4 +152,4 @@
            (r2 (extract backend compilation "text2")))
       (ok (typep (extraction-result-instance r1) 'item))
       (ok (typep (extraction-result-instance r2) 'item))
-      (ok (= 2 (mock-backend-call-count backend))))))
+      (ok (= 2 (mock-backend-calls backend))))))

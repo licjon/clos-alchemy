@@ -58,37 +58,47 @@ Returns an extraction-result whose instance slot is a list."
                             max-retries temperature max-tokens user-prompt)
   (let* ((schema (extraction-compilation-schema compilation))
          (system-prompt (extraction-compilation-prompt compilation))
+         (json-schema (schema-to-json-schema schema))
          (accumulated-errors '())
          (retry-context nil))
     (loop for attempt from 0 to max-retries
-          do (let* ((full-prompt (if retry-context
-                                     (format nil "~A~%~%~A" document retry-context)
-                                     document))
-                    (result (backend-generate backend schema full-prompt
-                                             :system-prompt system-prompt
-                                             :temperature temperature
-                                             :max-tokens max-tokens
-                                             :user-prompt user-prompt)))
-               (let ((raw-response (extraction-result-raw-response result))
-                     (raw-data (extraction-result-raw-data result)))
-                 (multiple-value-bind (valid-p errors)
-                     (validate-data raw-data schema)
-                   (if valid-p
-                       (let ((instance (construct-from-data raw-data schema)))
+          do (let* ((user-content
+                      (with-output-to-string (s)
+                        (when user-prompt (format s "~A~%~%" user-prompt))
+                        (write-string document s)
+                        (when retry-context (format s "~%~%~A" retry-context))))
+                    (messages
+                      (list (list :role "system" :content system-prompt)
+                            (list :role "user" :content user-content))))
+               (multiple-value-bind (raw-response info)
+                   (llm:backend-generate backend messages
+                                         :output-schema json-schema
+                                         :temperature temperature
+                                         :max-tokens (or max-tokens 1024))
+                 (let ((raw-data (parse-json-response raw-response)))
+                   (multiple-value-bind (valid-p errors)
+                       (validate-data raw-data schema)
+                     (if valid-p
                          (return-from %extract-with-retry
                            (make-extraction-result
-                            :instance instance
+                            :instance (construct-from-data raw-data schema)
                             :raw-data raw-data
                             :raw-response raw-response
                             :retries attempt
-                            :usage (extraction-result-usage result))))
-                       (progn
-                         (setf accumulated-errors (nconc accumulated-errors errors))
-                         (setf retry-context
-                               (%format-retry-context errors))))))))
+                            :usage (%info-to-usage info)))
+                         (progn
+                           (setf accumulated-errors
+                                 (nconc accumulated-errors errors))
+                           (setf retry-context
+                                 (%format-retry-context errors)))))))))
     (error 'max-retries-error
            :retries max-retries
            :errors accumulated-errors)))
+
+(defun %info-to-usage (info)
+  (when info
+    (list :prompt-tokens (llm:response-info-prompt-tokens info)
+          :completion-tokens (llm:response-info-completion-tokens info))))
 
 (defun %format-retry-context (errors)
   "Format validation errors as natural language for the retry prompt."
