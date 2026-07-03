@@ -15,8 +15,7 @@ constructs and returns typed instances with working accessors.
   ((name    :initarg :name    :accessor person-name    :type string)
    (age     :initarg :age     :accessor person-age     :type integer)
    (email   :initarg :email   :accessor person-email   :type (or null string))
-   (hobbies :initarg :hobbies :accessor person-hobbies :type list :list-of string))
-  (:metaclass clos-constructor:constructor-class))
+   (hobbies :initarg :hobbies :accessor person-hobbies :type list)))
 
 ;; 2. Extract from text
 (let* ((backend (clos-constructor/llama:make-llama-backend
@@ -100,18 +99,27 @@ Type specifiers on CLOS slots map to JSON Schema types:
 | =float=, =number=, =(float lo hi)=, =real= | ={"type":"number"}=                 | =ir-type-primitive= |
 | =boolean=                            | ={"type":"boolean"}=                | =ir-type-primitive= |
 | =(member :a :b :c)=                  | ={"enum":["a","b","c"]}=            | =ir-type-enum=      |
+| =list=                               | Array of strings                  | =ir-type-list=      |
 | =:list-of <type>=                    | ={"type":"array","items":{...}}=    | =ir-type-list=      |
 | =(vector <type>)=, =(array <type>)=    | ={"type":"array","items":{...}}=    | =ir-type-list=      |
 | =(or null <type>)=                   | ={"anyOf":[{...},{"type":"null"}]}= | =ir-type-nullable=  |
 | A CLOS class name                  | Nested object                     | =ir-type-object=    |
 
-=:list-of= is a custom slot option available on classes with
-=(:metaclass constructor-class)=. Standard CL has no parameterised list type —
-=list= carries no element type, so =:list-of= tells the schema layer what kind
-of items the array should contain. Slots typed =(vector <type>)= or
-=(array <type>)= receive a CL vector; =list= and =:list-of= slots receive a
-list. All elements must be the same type; mixed-type arrays
-(e.g. =["alice", 32, true]=) are not supported.
+A plain =list= slot defaults to string elements, and =(vector <type>)= gives
+typed elements on any class — neither needs a metaclass. Standard CL has no
+parameterised list type, so for the one remaining case — a *list* of
+non-string elements — =:list-of= is available as a custom slot option on
+classes with =(:metaclass constructor-class)=:
+
+#+begin_src lisp
+(defclass survey ()
+  ((scores :initarg :scores :type list :list-of integer))
+  (:metaclass clos-constructor:constructor-class))
+#+end_src
+
+Slots typed =(vector <type>)= or =(array <type>)= receive a CL vector; =list=
+and =:list-of= slots receive a list. All elements must be the same type;
+mixed-type arrays (e.g. =["alice", 32, true]=) are not supported.
 
 Any other type specifier signals a =schema-error= — named types with no JSON
 analogue (=hash-table=, =symbol=, =keyword=, =character=, =pathname=) and
@@ -200,8 +208,10 @@ matching the schema, eliminating post-hoc parsing failures.
   representation, never MOP internals. Adding a new LLM backend requires two
   generic functions, not knowledge of the introspection layer.
 - *Ordinary classes.* Define a CLOS class with types on its slots and the
-  library introspects it. Use =constructor-class= as the metaclass when you
-  need =:list-of= for typed arrays.
+  library introspects it. No metaclass needed for the common cases — plain
+  =list= slots default to string elements and =(vector <type>)= works
+  anywhere. =constructor-class= is opt-in, only for =:list-of= (lists of
+  non-string elements).
 
 * Examples
 

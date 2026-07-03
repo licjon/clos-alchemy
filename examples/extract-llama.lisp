@@ -30,11 +30,11 @@
 ;;; ── Domain classes ─────────────────────────────────────────────────
 
 (defclass person ()
-  ((name    :initarg :name    :accessor person-name    :type string)
+  ((name    :initarg :name    :accessor person-name    :type string
+            :documentation "The person's full legal name")
    (age     :initarg :age     :accessor person-age     :type integer)
    (email   :initarg :email   :accessor person-email   :type (or null string))
-   (hobbies :initarg :hobbies :accessor person-hobbies :type list :list-of string))
-  (:metaclass clos-constructor:constructor-class)
+   (hobbies :initarg :hobbies :accessor person-hobbies :type list))
   (:documentation "A person with contact info and hobbies."))
 
 (defclass address ()
