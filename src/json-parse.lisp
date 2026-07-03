@@ -2,15 +2,32 @@
 
 (defun parse-json-response (text)
   "Parse a JSON string from LLM output into nested hash tables.
-Handles markdown code fences and leading/trailing text."
+Handles markdown code fences and leading/trailing text.
+Booleans parse to :true/:false so they stay distinguishable from null (nil)."
   (let ((cleaned (%strip-llm-wrapper text)))
     (handler-case
-        (yason:parse cleaned :json-arrays-as-vectors nil)
+        (%normalize-booleans
+         (yason:parse cleaned
+                      :json-arrays-as-vectors nil
+                      :json-booleans-as-symbols t))
       (error (e)
         (error 'generation-error
                :backend :json-parser
                :reason (format nil "Failed to parse JSON: ~A~%Raw: ~A"
                                e (subseq text 0 (min 200 (length text)))))))))
+
+(defun %normalize-booleans (value)
+  "Map yason:true/yason:false to :true/:false throughout a parse tree."
+  (cond
+    ((eq value 'yason:true) :true)
+    ((eq value 'yason:false) :false)
+    ((hash-table-p value)
+     (maphash (lambda (k v)
+                (setf (gethash k value) (%normalize-booleans v)))
+              value)
+     value)
+    ((consp value) (mapcar #'%normalize-booleans value))
+    (t value)))
 
 (defun %strip-llm-wrapper (text)
   "Strip markdown code fences and find the JSON object in LLM output."

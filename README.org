@@ -143,9 +143,14 @@ Implement two generic functions to add a new backend:
 #+end_src
 
 =backend-generate= must return an =extraction-result= (a struct) with at least
-=:raw-response= (the LLM's raw string) and =:raw-data= (parsed data, typically
-an alist). The core fills in =:instance=, =:retries=, and =:usage= after
-validation and construction.
+=:raw-response= (the LLM's raw string) and =:raw-data= (parsed data as nested
+hash tables — =parse-json-response= produces the right shape). The core fills
+in =:instance=, =:retries=, and =:usage= after validation and construction.
+
+In =:raw-data=, JSON booleans must be =:true=/=:false= (or =t=), and JSON null
+is =nil= — =nil= means null, never false. =parse-json-response= follows this
+convention automatically; hand-rolled backends must too, or false booleans
+become indistinguishable from null.
 
 ** llama.cpp backend
 

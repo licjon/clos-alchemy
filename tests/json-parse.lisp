@@ -47,6 +47,23 @@
       (ok (listp (first matrix)))
       (ok (equal '((1 2) (3 4)) matrix)))))
 
+(deftest parse-distinguishes-false-from-null
+  (testing "false parses to :false, not nil"
+    (let ((result (parse-json-response "{\"active\": false}")))
+      (ok (eq :false (gethash "active" result)))))
+  (testing "true parses to :true"
+    (let ((result (parse-json-response "{\"active\": true}")))
+      (ok (eq :true (gethash "active" result)))))
+  (testing "null still parses to nil"
+    (let ((result (parse-json-response "{\"email\": null}")))
+      (ok (null (gethash "email" result)))
+      (ok (nth-value 1 (gethash "email" result)))))
+  (testing "booleans nested in arrays and objects are normalized"
+    (let ((result (parse-json-response
+                   "{\"flags\": [true, false], \"inner\": {\"ok\": false}}")))
+      (ok (equal '(:true :false) (gethash "flags" result)))
+      (ok (eq :false (gethash "ok" (gethash "inner" result)))))))
+
 (deftest parse-invalid-json-signals-error
   (ok (handler-case
           (progn (parse-json-response "not json at all {broken") nil)

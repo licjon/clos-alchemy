@@ -54,6 +54,26 @@
 
 ;;; ── Tests ─────────────────────────────────────────────────────────
 
+(defclass flagged ()
+  ((name   :initarg :name   :accessor flagged-name   :type string)
+   (active :initarg :active :accessor flagged-active :type boolean)))
+
+(deftest boolean-false-survives-extraction
+  (testing "a required boolean field whose value is false validates and constructs"
+    (let* ((raw "{\"name\":\"widget\",\"active\":false}")
+           (backend (make-mock-backend
+                     :responses (list (list raw (parse-json-response raw)))))
+           (result (extract backend 'flagged "text")))
+      (ok (typep (extraction-result-instance result) 'flagged))
+      (ok (eq nil (flagged-active (extraction-result-instance result))))
+      (ok (= 0 (extraction-result-retries result)))))
+  (testing "true coerces to t"
+    (let* ((raw "{\"name\":\"widget\",\"active\":true}")
+           (backend (make-mock-backend
+                     :responses (list (list raw (parse-json-response raw)))))
+           (result (extract backend 'flagged "text")))
+      (ok (eq t (flagged-active (extraction-result-instance result)))))))
+
 (deftest succeeds-on-first-attempt
   (let* ((backend (make-mock-backend :responses (list (good-data))))
          (result (extract backend 'item "text")))
