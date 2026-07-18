@@ -7,6 +7,17 @@ Define ordinary CLOS classes. =clos-constructor= introspects them via the MOP,
 generates a JSON Schema, constrains the LLM to produce valid output, then
 constructs and returns typed instances with working accessors.
 
+* Why
+
+LLMs are good at reading messy text but hand you strings; programs want typed
+data. Python has [[https://github.com/instructor-ai/instructor][instructor]] (Pydantic models as extraction targets); Common
+Lisp already has a richer modelling layer built in — CLOS with the MOP. This
+library uses your class definition itself as the extraction contract: slot
+types become the JSON Schema, the schema becomes a grammar constraint on
+generation, and the response comes back as a real instance of your class.
+There's no separate schema DSL to maintain, and no hash tables or plists to
+destructure — if it type-checks as your class, you're done.
+
 * Quick start
 
 #+begin_src lisp
@@ -32,13 +43,50 @@ accessors work as expected.
 
 * Installation
 
-Backends come from [[https://github.com/licjon/cl-llm-backend][cl-llm-backend]]; the llama.cpp backend additionally
-requires cl-llama-cpp and cl-llama-cpp-extras.
+Not yet in Quicklisp — clone this repo and [[https://github.com/licjon/cl-llm-backend][cl-llm-backend]] into a directory
+ASDF searches, e.g. =~/quicklisp/local-projects/= (or
+=~/.roswell/local-projects/= for Roswell):
+
+#+begin_src bash
+cd ~/quicklisp/local-projects
+git clone https://github.com/licjon/clos-constructor
+git clone https://github.com/licjon/cl-llm-backend
+#+end_src
+
+Then load the core system — the remaining dependencies (=closer-mop=, =yason=)
+come from Quicklisp automatically:
 
 #+begin_src lisp
-(ql:quickload :clos-constructor)      ; core
-(ql:quickload :cl-llm-backend/llama)  ; llama.cpp backend
+(ql:quickload :clos-constructor)
 #+end_src
+
+If Quicklisp doesn't see the fresh clones, run =(ql:register-local-projects)=
+first.
+
+** llama.cpp backend
+
+The llama.cpp backend additionally requires [[https://github.com/licjon/cl-llama-cpp][cl-llama-cpp]] — which bundles
+llama.cpp as a git submodule and needs it built as a shared library — and
+[[https://github.com/licjon/cl-llama-cpp-extras][cl-llama-cpp-extras]]:
+
+#+begin_src bash
+cd ~/quicklisp/local-projects
+git clone --recursive https://github.com/licjon/cl-llama-cpp
+git clone https://github.com/licjon/cl-llama-cpp-extras
+cd cl-llama-cpp/llama.cpp
+cmake -B build -DBUILD_SHARED_LIBS=ON
+cmake --build build -j$(nproc)
+#+end_src
+
+See the [[https://github.com/licjon/cl-llama-cpp][cl-llama-cpp README]] for GPU builds, full requirements, and
+troubleshooting. Then:
+
+#+begin_src lisp
+(ql:quickload :cl-llm-backend/llama)
+#+end_src
+
+You'll also need a GGUF model file (e.g. from [[https://huggingface.co/models?library=gguf][Hugging Face]]) to run the
+examples.
 
 * Systems
 
@@ -255,8 +303,7 @@ Example output:
 * Running tests
 
 #+begin_src lisp
-(asdf:test-system :clos-constructor)        ; core tests (no model needed)
-(asdf:test-system :clos-constructor/llama)  ; backend tests (no model needed)
+(asdf:test-system :clos-constructor)  ; no model needed
 #+end_src
 
 * License
