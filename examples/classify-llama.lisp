@@ -21,15 +21,18 @@
 
 ;;; ── Classification schema ─────────────────────────────────────────
 
+;; reason comes first: generation follows slot order, so the model
+;; writes its analysis before the grammar makes it commit to the enums.
 (defclass ticket-classification ()
-  ((urgency  :initarg :urgency  :accessor ticket-urgency
+  ((reason   :initarg :reason   :accessor ticket-reason
+             :type string
+             :documentation "Brief analysis of the ticket, written before classifying")
+   (urgency  :initarg :urgency  :accessor ticket-urgency
              :type (member :low :medium :high :critical))
    (category :initarg :category :accessor ticket-category
              :type (member :billing :technical :account :general))
    (sentiment :initarg :sentiment :accessor ticket-sentiment
-              :type (member :positive :negative :neutral))
-   (reason   :initarg :reason   :accessor ticket-reason
-             :type string))
+              :type (member :positive :negative :neutral)))
   (:documentation "Structured classification of a support ticket."))
 
 ;;; ── Test tickets ──────────────────────────────────────────────────

@@ -273,11 +273,15 @@ allowed values — no training data, no string matching, no post-processing.
 
 #+begin_src lisp
 (defclass ticket-classification ()
-  ((urgency   :type (member :low :medium :high :critical) ...)
+  ((reason    :type string ...)
+   (urgency   :type (member :low :medium :high :critical) ...)
    (category  :type (member :billing :technical :account :general) ...)
-   (sentiment :type (member :positive :negative :neutral) ...)
-   (reason    :type string ...)))
+   (sentiment :type (member :positive :negative :neutral) ...)))
 #+end_src
+
+Fields are generated in slot-definition order, so putting the free-text
+=reason= slot first makes the model write its analysis /before/ the grammar
+forces it to commit to the enum values — chain-of-thought inside the schema.
 
 #+begin_src lisp
 (setf clos-constructor/examples/classify-llama::*model-path*
