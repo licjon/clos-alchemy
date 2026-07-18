@@ -135,8 +135,11 @@ Portland, Oregon."))
 
 (defun run (&key (model-path *model-path*)
                  (n-gpu-layers 99)
-                 (n-ctx 4096))
-  "Run all clos-constructor + llama.cpp demos."
+                 (n-ctx 4096)
+                 chat-template)
+  "Run all clos-constructor + llama.cpp demos.
+CHAT-TEMPLATE overrides the model's embedded chat template — pass a llama.cpp
+built-in name (e.g. \"gemma\") when the embedded template is unsupported."
   (unless model-path
     (format t "Set *model-path* or export LLAMA_MODEL before calling run.~%")
     (return-from run (values)))
@@ -150,7 +153,8 @@ Portland, Oregon."))
     (cl-llama-cpp:with-model (model model-path :n-gpu-layers n-gpu-layers)
       (cl-llama-cpp:with-context (ctx model :n-ctx n-ctx)
         (let ((backend (cl-llm-backend/llama:make-llama-backend
-                        :model model :context ctx)))
+                        :model model :context ctx
+                        :chat-template chat-template)))
           (demo-single-extraction backend)
           (demo-list-extraction backend)
           (demo-nested-extraction backend)))))
