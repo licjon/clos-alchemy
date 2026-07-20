@@ -1,4 +1,4 @@
-(in-package #:clos-constructor)
+(in-package #:clos-alchemy)
 
 (defun lisp-name-to-json-name (symbol)
   "Convert a Lisp symbol name to a JSON key name.

@@ -1,7 +1,7 @@
-(defpackage #:clos-constructor/tests/json-parse
-  (:use #:cl #:rove #:clos-constructor))
+(defpackage #:clos-alchemy/tests/json-parse
+  (:use #:cl #:rove #:clos-alchemy))
 
-(in-package #:clos-constructor/tests/json-parse)
+(in-package #:clos-alchemy/tests/json-parse)
 
 (deftest parse-clean-json
   (let ((result (parse-json-response "{\"name\": \"Alice\", \"age\": 30}")))

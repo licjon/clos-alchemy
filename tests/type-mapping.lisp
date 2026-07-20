@@ -1,7 +1,7 @@
-(defpackage #:clos-constructor/tests/type-mapping
-  (:use #:cl #:rove #:clos-constructor))
+(defpackage #:clos-alchemy/tests/type-mapping
+  (:use #:cl #:rove #:clos-alchemy))
 
-(in-package #:clos-constructor/tests/type-mapping)
+(in-package #:clos-alchemy/tests/type-mapping)
 
 ;;; Primitive type mappings
 

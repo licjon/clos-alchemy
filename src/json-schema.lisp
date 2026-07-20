@@ -1,4 +1,4 @@
-(in-package #:clos-constructor)
+(in-package #:clos-alchemy)
 
 (defun schema-to-json-schema (schema)
   "Translate an ir-schema to a JSON Schema representation (hash table).

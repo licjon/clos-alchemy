@@ -1,4 +1,4 @@
-(in-package #:clos-constructor)
+(in-package #:clos-alchemy)
 
 (defun parse-json-response (text)
   "Parse a JSON string from LLM output into nested hash tables.

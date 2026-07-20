@@ -1,7 +1,7 @@
-(defpackage #:clos-constructor/tests/json-schema
-  (:use #:cl #:rove #:clos-constructor))
+(defpackage #:clos-alchemy/tests/json-schema
+  (:use #:cl #:rove #:clos-alchemy))
 
-(in-package #:clos-constructor/tests/json-schema)
+(in-package #:clos-alchemy/tests/json-schema)
 
 (defun ht-get (ht key)
   (gethash key ht))

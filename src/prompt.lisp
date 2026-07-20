@@ -1,4 +1,4 @@
-(in-package #:clos-constructor)
+(in-package #:clos-alchemy)
 
 (defun generate-system-prompt (schema &key user-prompt)
   "Generate a system prompt for structured extraction from an ir-schema.

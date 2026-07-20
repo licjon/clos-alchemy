@@ -1,4 +1,4 @@
-(defpackage #:clos-constructor
+(defpackage #:clos-alchemy
   (:use #:cl)
   (:export
    ;; IR type nodes

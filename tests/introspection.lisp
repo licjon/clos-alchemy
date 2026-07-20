@@ -1,7 +1,7 @@
-(defpackage #:clos-constructor/tests/introspection
-  (:use #:cl #:rove #:clos-constructor))
+(defpackage #:clos-alchemy/tests/introspection
+  (:use #:cl #:rove #:clos-alchemy))
 
-(in-package #:clos-constructor/tests/introspection)
+(in-package #:clos-alchemy/tests/introspection)
 
 ;;; Test classes
 

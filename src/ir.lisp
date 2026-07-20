@@ -1,4 +1,4 @@
-(in-package #:clos-constructor)
+(in-package #:clos-alchemy)
 
 ;;; Type nodes — tagged union pattern inspired by C2FFI's AST
 

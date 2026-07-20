@@ -1,9 +1,9 @@
-#+title: clos-constructor
+#+title: clos-alchemy
 #+author: Jonathan Hustad
 
 Extract structured data from unstructured text via LLMs into typed CLOS instances.
 
-Define ordinary CLOS classes. =clos-constructor= introspects them via the MOP,
+Define ordinary CLOS classes. =clos-alchemy= introspects them via the MOP,
 generates a JSON Schema, constrains the LLM to produce valid output, then
 constructs and returns typed instances with working accessors.
 
@@ -49,7 +49,7 @@ ASDF searches, e.g. =~/quicklisp/local-projects/= (or
 
 #+begin_src bash
 cd ~/quicklisp/local-projects
-git clone https://github.com/licjon/clos-constructor
+git clone https://github.com/licjon/clos-alchemy
 git clone https://github.com/licjon/cl-llm-backend
 #+end_src
 
@@ -57,7 +57,7 @@ Then load the core system — the remaining dependencies (=closer-mop=, =yason=)
 come from Quicklisp automatically:
 
 #+begin_src lisp
-(ql:quickload :clos-constructor)
+(ql:quickload :clos-alchemy)
 #+end_src
 
 If Quicklisp doesn't see the fresh clones, run =(ql:register-local-projects)=
@@ -92,9 +92,9 @@ examples.
 
 | System                    | Description                              | Dependencies                        |
 |---------------------------+------------------------------------------+-------------------------------------|
-| =clos-constructor=          | Core library — introspection, IR, schema | =closer-mop=, =yason=, =cl-llm-backend= |
-| =clos-constructor/tests=    | Core test suite                          | =rove=                                |
-| =clos-constructor/examples= | Example programs                         | =clos-constructor=, =cl-llm-backend/llama= |
+| =clos-alchemy=          | Core library — introspection, IR, schema | =closer-mop=, =yason=, =cl-llm-backend= |
+| =clos-alchemy/tests=    | Core test suite                          | =rove=                                |
+| =clos-alchemy/examples= | Example programs                         | =clos-alchemy=, =cl-llm-backend/llama= |
 
 * How it works
 
@@ -161,7 +161,7 @@ classes with =(:metaclass constructor-class)=:
 #+begin_src lisp
 (defclass survey ()
   ((scores :initarg :scores :type list :list-of integer))
-  (:metaclass clos-constructor:constructor-class))
+  (:metaclass clos-alchemy:constructor-class))
 #+end_src
 
 Slots typed =(vector <type>)= or =(array <type>)= receive a CL vector; =list=
@@ -249,7 +249,7 @@ matching the schema, eliminating post-hoc parsing failures.
 Set the model path once, then run either example:
 
 #+begin_src lisp
-(ql:quickload :clos-constructor/examples)
+(ql:quickload :clos-alchemy/examples)
 #+end_src
 
 Or set the environment variable =LLAMA_MODEL= before starting the Lisp image.
@@ -259,10 +259,10 @@ Or set the environment variable =LLAMA_MODEL= before starting the Lisp image.
 Single extraction, list extraction, and nested classes.
 
 #+begin_src lisp
-(setf clos-constructor/examples/extract-llama::*model-path*
+(setf clos-alchemy/examples/extract-llama::*model-path*
       "/path/to/model.gguf")
 
-(clos-constructor/examples/extract-llama:run)
+(clos-alchemy/examples/extract-llama:run)
 #+end_src
 
 ** Zero-shot structured classifier (=classify-llama=)
@@ -284,10 +284,10 @@ Fields are generated in slot-definition order, so putting the free-text
 forces it to commit to the enum values — chain-of-thought inside the schema.
 
 #+begin_src lisp
-(setf clos-constructor/examples/classify-llama::*model-path*
+(setf clos-alchemy/examples/classify-llama::*model-path*
       "/path/to/model.gguf")
 
-(clos-constructor/examples/classify-llama:run)
+(clos-alchemy/examples/classify-llama:run)
 #+end_src
 
 Example output:
@@ -307,7 +307,7 @@ Example output:
 * Running tests
 
 #+begin_src lisp
-(asdf:test-system :clos-constructor)  ; no model needed
+(asdf:test-system :clos-alchemy)  ; no model needed
 #+end_src
 
 * License

@@ -1,7 +1,7 @@
-(defpackage #:clos-constructor/tests/unsupported-types
-  (:use #:cl #:rove #:clos-constructor))
+(defpackage #:clos-alchemy/tests/unsupported-types
+  (:use #:cl #:rove #:clos-alchemy))
 
-(in-package #:clos-constructor/tests/unsupported-types)
+(in-package #:clos-alchemy/tests/unsupported-types)
 
 ;;; Type-specifier coverage beyond the basic table.
 ;;;

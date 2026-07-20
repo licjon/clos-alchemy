@@ -1,9 +1,9 @@
-(defpackage #:clos-constructor/tests/extract
-  (:use #:cl #:rove #:clos-constructor)
+(defpackage #:clos-alchemy/tests/extract
+  (:use #:cl #:rove #:clos-alchemy)
   (:import-from #:cl-llm-backend
                 #:make-mock-backend #:mock-backend-calls))
 
-(in-package #:clos-constructor/tests/extract)
+(in-package #:clos-alchemy/tests/extract)
 
 ;;; The protocol mock (cl-llm-backend) returns canned response strings;
 ;;; %extract-with-retry parses them itself, so scripted responses are

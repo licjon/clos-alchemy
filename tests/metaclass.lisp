@@ -1,7 +1,7 @@
-(defpackage #:clos-constructor/tests/metaclass
-  (:use #:cl #:rove #:clos-constructor))
+(defpackage #:clos-alchemy/tests/metaclass
+  (:use #:cl #:rove #:clos-alchemy))
 
-(in-package #:clos-constructor/tests/metaclass)
+(in-package #:clos-alchemy/tests/metaclass)
 
 ;;; Test classes using the custom slot option
 

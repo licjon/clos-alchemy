@@ -1,7 +1,7 @@
-(in-package #:clos-constructor)
+(in-package #:clos-alchemy)
 
 (define-condition extraction-error (error) ()
-  (:documentation "Base condition for clos-constructor errors."))
+  (:documentation "Base condition for clos-alchemy errors."))
 
 (define-condition schema-error (extraction-error)
   ((class-name :initarg :class-name :reader schema-error-class-name)

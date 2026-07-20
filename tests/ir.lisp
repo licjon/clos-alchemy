@@ -1,7 +1,7 @@
-(defpackage #:clos-constructor/tests/ir
-  (:use #:cl #:rove #:clos-constructor))
+(defpackage #:clos-alchemy/tests/ir
+  (:use #:cl #:rove #:clos-alchemy))
 
-(in-package #:clos-constructor/tests/ir)
+(in-package #:clos-alchemy/tests/ir)
 
 ;;; Type node construction and predicates
 

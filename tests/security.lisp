@@ -1,7 +1,7 @@
-(defpackage #:clos-constructor/tests/security
-  (:use #:cl #:rove #:clos-constructor))
+(defpackage #:clos-alchemy/tests/security
+  (:use #:cl #:rove #:clos-alchemy))
 
-(in-package #:clos-constructor/tests/security)
+(in-package #:clos-alchemy/tests/security)
 
 ;;; Test classes
 

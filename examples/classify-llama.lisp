@@ -1,21 +1,21 @@
 ;;;; classify-llama.lisp
 ;;;;
-;;;; Zero-shot support ticket classifier using clos-constructor.
+;;;; Zero-shot support ticket classifier using clos-alchemy.
 ;;;; Define a CLOS class whose slots are enums — the grammar constraint
 ;;;; forces the LLM to pick from the allowed values, giving you a
 ;;;; structured classifier with no training data and no string matching.
 ;;;;
 ;;;; Setup:
-;;;;   (ql:quickload :clos-constructor/examples)
-;;;;   (setf clos-constructor/examples/classify-llama::*model-path*
+;;;;   (ql:quickload :clos-alchemy/examples)
+;;;;   (setf clos-alchemy/examples/classify-llama::*model-path*
 ;;;;         "/path/to/model.gguf")
-;;;;   (clos-constructor/examples/classify-llama:run)
+;;;;   (clos-alchemy/examples/classify-llama:run)
 
-(defpackage #:clos-constructor/examples/classify-llama
-  (:use #:cl #:clos-constructor)
+(defpackage #:clos-alchemy/examples/classify-llama
+  (:use #:cl #:clos-alchemy)
   (:export #:run))
 
-(in-package #:clos-constructor/examples/classify-llama)
+(in-package #:clos-alchemy/examples/classify-llama)
 
 (defvar *model-path* (uiop:getenv "LLAMA_MODEL"))
 

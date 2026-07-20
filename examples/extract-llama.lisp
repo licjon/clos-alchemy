@@ -1,6 +1,6 @@
 ;;;; extract-llama.lisp
 ;;;;
-;;;; Demonstrates clos-constructor with a local llama.cpp model. Define
+;;;; Demonstrates clos-alchemy with a local llama.cpp model. Define
 ;;;; ordinary CLOS classes, then extract typed instances from unstructured
 ;;;; text — the JSON Schema is derived from the class, converted to a GBNF
 ;;;; grammar, and the model is constrained to produce valid output.
@@ -11,19 +11,19 @@
 ;;;;   3. Nested classes — extract objects that reference other CLOS objects
 ;;;;
 ;;;; Setup:
-;;;;   (ql:quickload :clos-constructor/examples)
-;;;;   (setf clos-constructor/examples/extract-llama::*model-path*
+;;;;   (ql:quickload :clos-alchemy/examples)
+;;;;   (setf clos-alchemy/examples/extract-llama::*model-path*
 ;;;;         "/path/to/model.gguf")
-;;;;   (clos-constructor/examples/extract-llama:run)
+;;;;   (clos-alchemy/examples/extract-llama:run)
 ;;;;
 ;;;; Or via environment variable:
 ;;;;   export LLAMA_MODEL=/path/to/model.gguf
 
-(defpackage #:clos-constructor/examples/extract-llama
-  (:use #:cl #:clos-constructor)
+(defpackage #:clos-alchemy/examples/extract-llama
+  (:use #:cl #:clos-alchemy)
   (:export #:run))
 
-(in-package #:clos-constructor/examples/extract-llama)
+(in-package #:clos-alchemy/examples/extract-llama)
 
 (defvar *model-path* (uiop:getenv "LLAMA_MODEL"))
 
@@ -137,7 +137,7 @@ Portland, Oregon."))
                  (n-gpu-layers 99)
                  (n-ctx 4096)
                  chat-template)
-  "Run all clos-constructor + llama.cpp demos.
+  "Run all clos-alchemy + llama.cpp demos.
 CHAT-TEMPLATE overrides the model's embedded chat template — pass a llama.cpp
 built-in name (e.g. \"gemma\") when the embedded template is unsupported."
   (unless model-path

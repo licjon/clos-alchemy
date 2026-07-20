@@ -1,7 +1,7 @@
-(defpackage #:clos-constructor/tests/prompt
-  (:use #:cl #:rove #:clos-constructor))
+(defpackage #:clos-alchemy/tests/prompt
+  (:use #:cl #:rove #:clos-alchemy))
 
-(in-package #:clos-constructor/tests/prompt)
+(in-package #:clos-alchemy/tests/prompt)
 
 (defun person-schema ()
   (make-ir-schema

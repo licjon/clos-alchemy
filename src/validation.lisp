@@ -1,4 +1,4 @@
-(in-package #:clos-constructor)
+(in-package #:clos-alchemy)
 
 (defun validate-data (data schema)
   "Validate parsed data (hash table) against an ir-schema.

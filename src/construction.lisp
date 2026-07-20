@@ -1,4 +1,4 @@
-(in-package #:clos-constructor)
+(in-package #:clos-alchemy)
 
 (defun construct-from-data (data schema)
   "Construct a CLOS instance from validated data using the IR schema.

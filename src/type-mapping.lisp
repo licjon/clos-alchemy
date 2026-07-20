@@ -1,4 +1,4 @@
-(in-package #:clos-constructor)
+(in-package #:clos-alchemy)
 
 (defun cl-type-to-ir-type (type-spec &key schema-cache slot-types)
   "Translate a CL type specifier to an IR type node.

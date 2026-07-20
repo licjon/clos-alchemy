@@ -1,7 +1,7 @@
-(defpackage #:clos-constructor/tests/validation
-  (:use #:cl #:rove #:clos-constructor))
+(defpackage #:clos-alchemy/tests/validation
+  (:use #:cl #:rove #:clos-alchemy))
 
-(in-package #:clos-constructor/tests/validation)
+(in-package #:clos-alchemy/tests/validation)
 
 (defun make-data (&rest pairs)
   (let ((ht (make-hash-table :test 'equal)))

@@ -1,4 +1,4 @@
-(in-package #:clos-constructor)
+(in-package #:clos-alchemy)
 
 (defun compile-extractor (class-designator &key (mode :full)
                                                 slot-list
