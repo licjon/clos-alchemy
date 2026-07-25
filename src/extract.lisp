@@ -75,22 +75,29 @@ Returns an extraction-result whose instance slot is a list."
                                          :output-schema json-schema
                                          :temperature temperature
                                          :max-tokens (or max-tokens 1024))
-                 (let ((raw-data (parse-json-response raw-response)))
-                   (multiple-value-bind (valid-p errors)
-                       (validate-data raw-data schema)
-                     (if valid-p
-                         (return-from %extract-with-retry
-                           (make-extraction-result
-                            :instance (construct-from-data raw-data schema)
-                            :raw-data raw-data
-                            :raw-response raw-response
-                            :retries attempt
-                            :usage (%info-to-usage info)))
-                         (progn
-                           (setf accumulated-errors
-                                 (nconc accumulated-errors errors))
-                           (setf retry-context
-                                 (%format-retry-context errors)))))))))
+                 (handler-case
+                     (let ((raw-data (parse-json-response raw-response)))
+                       (multiple-value-bind (valid-p errors)
+                           (validate-data raw-data schema)
+                         (if valid-p
+                             (return-from %extract-with-retry
+                               (make-extraction-result
+                                :instance (construct-from-data raw-data schema)
+                                :raw-data raw-data
+                                :raw-response raw-response
+                                :retries attempt
+                                :usage (%info-to-usage info)))
+                             (progn
+                               (setf accumulated-errors
+                                     (nconc accumulated-errors errors))
+                               (setf retry-context
+                                     (%format-retry-context errors))))))
+                   (generation-error (e)
+                     (push (format nil "Parse failure: ~A"
+                                   (generation-error-reason e))
+                           accumulated-errors)
+                     (setf retry-context
+                           (%format-parse-retry-context e raw-response)))))))
     (error 'max-retries-error
            :retries max-retries
            :errors accumulated-errors)))
@@ -107,3 +114,12 @@ Returns an extraction-result whose instance slot is a list."
     (dolist (err errors)
       (format s "- ~A~%" err))
     (format s "Please fix these errors and try again.")))
+
+(defun %format-parse-retry-context (error raw-response)
+  "Format a parse failure as corrective context for the retry prompt."
+  (with-output-to-string (s)
+    (format s "Previous response could not be parsed as JSON: ~A~%"
+            (generation-error-reason error))
+    (format s "Raw response (first 200 chars): ~A~%"
+            (subseq raw-response 0 (min 200 (length raw-response))))
+    (format s "Please respond with ONLY valid JSON matching the schema. No markdown fences, no explanatory text.")))

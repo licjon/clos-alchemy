@@ -68,3 +68,17 @@
   (ok (handler-case
           (progn (parse-json-response "not json at all {broken") nil)
         (generation-error () t))))
+
+(deftest parse-empty-string-signals-generation-error
+  (testing "empty string"
+    (ok (handler-case
+            (progn (parse-json-response "") nil)
+          (generation-error () t))))
+  (testing "whitespace-only"
+    (ok (handler-case
+            (progn (parse-json-response "   ") nil)
+          (generation-error () t))))
+  (testing "newlines and tabs only"
+    (ok (handler-case
+            (progn (parse-json-response (format nil "~%~C~%" #\Tab)) nil)
+          (generation-error () t)))))

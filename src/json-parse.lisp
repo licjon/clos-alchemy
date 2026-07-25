@@ -4,18 +4,18 @@
   "Parse a JSON string from LLM output into nested hash tables.
 Handles markdown code fences and leading/trailing text.
 Booleans parse to :true/:false so they stay distinguishable from null (nil)."
-  (let ((cleaned (%strip-llm-wrapper text)))
-    (handler-case
+  (handler-case
+      (let ((cleaned (%strip-llm-wrapper text)))
         (%normalize-parse-tree
          (yason:parse cleaned
                       :json-arrays-as-vectors nil
                       :json-booleans-as-symbols t
-                      :json-nulls-as-keyword t))
-      (error (e)
-        (error 'generation-error
-               :backend :json-parser
-               :reason (format nil "Failed to parse JSON: ~A~%Raw: ~A"
-                               e (subseq text 0 (min 200 (length text)))))))))
+                      :json-nulls-as-keyword t)))
+    (error (e)
+      (error 'generation-error
+             :backend :json-parser
+             :reason (format nil "Failed to parse JSON: ~A~%Raw: ~A"
+                             e (subseq text 0 (min 200 (length text))))))))
 
 (defun %normalize-parse-tree (value)
   "Normalize yason symbols throughout a parse tree:
@@ -43,6 +43,9 @@ yason:true/yason:false → :true/:false, yason:null → :null."
           (let ((start (or (position #\Newline s :start 3) 3)))
             (setf s (string-trim '(#\Space #\Tab #\Newline #\Return)
                                  (subseq s (1+ start) end-fence)))))))
+    ;; If empty after stripping, return as-is and let the parser signal
+    (when (zerop (length s))
+      (return-from %strip-llm-wrapper s))
     ;; If not starting with { or [, find the first one
     (unless (or (char= (char s 0) #\{)
                 (char= (char s 0) #\[))
