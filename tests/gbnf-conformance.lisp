@@ -64,3 +64,12 @@ the chain-of-thought ordering documented at README:300"
     (let ((grammar (json-schema-to-grammar
                     (schema-to-json-schema (class-to-schema 'optional-slot)))))
       (ok (< (search "reason-kv" grammar) (search "nick-kv" grammar))))))
+
+;;; Cyclic schemas (#1)
+
+(defclass tree-node ()
+  ((label :type string :initarg :label)
+   (child :type tree-node :initarg :child :initform nil)))
+
+(deftest gbnf/self-referencing-class
+  (ok (compiles-to-grammar-p 'tree-node)))
