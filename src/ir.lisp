@@ -30,6 +30,12 @@
   (initarg nil :type (or symbol null))
   (description nil :type (or string null)))
 
+(defun wire-nullable-p (field)
+  "True when FIELD is optional but not declared nullable — the wire format
+must permit null so the model can express absence."
+  (and (not (ir-field-required-p field))
+       (not (ir-field-nullable-p field))))
+
 ;;; Schema — top-level extraction target
 
 (defstruct (ir-schema (:copier nil))
