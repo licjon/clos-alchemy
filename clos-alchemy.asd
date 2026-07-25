@@ -37,7 +37,18 @@
                  (:file "json-parse")
                  (:file "extract")
                  (:file "security")
-                 (:file "unsupported-types"))))
+                 (:file "unsupported-types")
+                 (:file "schema-conformance"))))
+  :perform (test-op (op c) (symbol-call :rove :run c)))
+
+;;; Gated: needs llama.cpp built as a shared library, so it stays out of the
+;;; core test system. Asserts emitted schemas compile to GBNF grammars.
+(defsystem "clos-alchemy/tests/gbnf"
+  :description "GBNF conformance tests for clos-alchemy (requires cl-llama-cpp-extras)"
+  :depends-on ("clos-alchemy" "cl-llama-cpp-extras/json-schema" "rove")
+  :components ((:module "tests"
+                :components
+                ((:file "gbnf-conformance"))))
   :perform (test-op (op c) (symbol-call :rove :run c)))
 
 (defsystem "clos-alchemy/examples"

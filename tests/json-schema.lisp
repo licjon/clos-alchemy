@@ -38,14 +38,21 @@
   (let ((js (schema-to-json-schema (make-test-schema))))
     (ok (string= "object" (ht-get js "type")))
     (ok (hash-table-p (ht-get js "properties")))
-    (ok (null (ht-get js "additionalProperties")))))
+    ;; Must serialise to JSON false, not null. NIL here encodes as null, which
+    ;; OpenAI strict mode rejects outright (issue #5).
+    (ok (eq 'yason:false (ht-get js "additionalProperties")))))
 
 (deftest required-array
+  ;; OpenAI strict mode requires every key in properties to appear in required,
+  ;; at every nesting level (issue #15). Optionality is expressed by permitting
+  ;; null, not by omission from this array.
   (let* ((js (schema-to-json-schema (make-test-schema)))
          (required (ht-get js "required")))
-    (ok (= 2 (length required)))
+    (ok (= 4 (length required)))
     (ok (member "name" required :test #'string=))
-    (ok (member "age" required :test #'string=))))
+    (ok (member "age" required :test #'string=))
+    (ok (member "email" required :test #'string=))
+    (ok (member "status" required :test #'string=))))
 
 ;;; Primitive type mappings
 
@@ -64,11 +71,15 @@
 ;;; Enum
 
 (deftest enum-schema
+  ;; `status` is optional and not declared nullable, so it is emitted as a
+  ;; choice between its enum type and null (issue #15). The enum itself lives
+  ;; in the first branch.
   (let* ((js (schema-to-json-schema (make-test-schema)))
          (props (ht-get js "properties"))
-         (status-js (ht-get props "status")))
-    (ok (string= "string" (ht-get status-js "type")))
-    (ok (equal '("active" "inactive") (ht-get status-js "enum")))))
+         (status-js (ht-get props "status"))
+         (enum-branch (first (ht-get status-js "anyOf"))))
+    (ok (string= "string" (ht-get enum-branch "type")))
+    (ok (equal '("active" "inactive") (ht-get enum-branch "enum")))))
 
 ;;; Nullable
 

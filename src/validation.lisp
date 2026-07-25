@@ -22,12 +22,10 @@ Returns (values valid-p error-list). Errors are collected, not signaled."
                              :actual "missing")))
       ;; Missing optional field — ok
       ((not present-p) nil)
-      ;; Empty array — nil and the empty list are the same object in CL
-      ((and (null value) (ir-type-list-p (ir-field-type field)))
-       nil)
-      ;; Null value
-      ((null value)
-       (if (ir-field-nullable-p field)
+      ;; Null value — accepted for declared-nullable and wire-nullable fields
+      ((eq value :null)
+       (if (or (ir-field-nullable-p field)
+               (wire-nullable-p field))
            nil
            (list (make-condition 'validation-error
                                  :field-name key
@@ -89,7 +87,7 @@ Returns (values valid-p error-list). Errors are collected, not signaled."
         errors)))
 
 (defun %validate-nullable (value ir-type field-name)
-  (if (null value)
+  (if (eq value :null)
       nil
       (%validate-type value (ir-type-nullable-inner-type ir-type) field-name)))
 

@@ -6,27 +6,30 @@ Handles markdown code fences and leading/trailing text.
 Booleans parse to :true/:false so they stay distinguishable from null (nil)."
   (let ((cleaned (%strip-llm-wrapper text)))
     (handler-case
-        (%normalize-booleans
+        (%normalize-parse-tree
          (yason:parse cleaned
                       :json-arrays-as-vectors nil
-                      :json-booleans-as-symbols t))
+                      :json-booleans-as-symbols t
+                      :json-nulls-as-keyword t))
       (error (e)
         (error 'generation-error
                :backend :json-parser
                :reason (format nil "Failed to parse JSON: ~A~%Raw: ~A"
                                e (subseq text 0 (min 200 (length text)))))))))
 
-(defun %normalize-booleans (value)
-  "Map yason:true/yason:false to :true/:false throughout a parse tree."
+(defun %normalize-parse-tree (value)
+  "Normalize yason symbols throughout a parse tree:
+yason:true/yason:false → :true/:false, yason:null → :null."
   (cond
     ((eq value 'yason:true) :true)
     ((eq value 'yason:false) :false)
+    ((eq value 'yason:null) :null)
     ((hash-table-p value)
      (maphash (lambda (k v)
-                (setf (gethash k value) (%normalize-booleans v)))
+                (setf (gethash k value) (%normalize-parse-tree v)))
               value)
      value)
-    ((consp value) (mapcar #'%normalize-booleans value))
+    ((consp value) (mapcar #'%normalize-parse-tree value))
     (t value)))
 
 (defun %strip-llm-wrapper (text)

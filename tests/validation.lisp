@@ -36,7 +36,7 @@
 ;;; Valid data
 
 (deftest valid-data-passes
-  (let ((data (make-data "name" "Alice" "age" 30 "email" nil "status" "active")))
+  (let ((data (make-data "name" "Alice" "age" 30 "email" :null "status" "active")))
     (multiple-value-bind (valid-p errors)
         (validate-data data (person-schema))
       (ok valid-p)
@@ -80,7 +80,7 @@
 ;;; Null for non-nullable
 
 (deftest null-for-required-field
-  (let ((data (make-data "name" nil "age" 30)))
+  (let ((data (make-data "name" :null "age" 30)))
     (multiple-value-bind (valid-p errors)
         (validate-data data (person-schema))
       (ok (not valid-p)))))
@@ -88,7 +88,7 @@
 ;;; Null for nullable — ok
 
 (deftest null-for-nullable-field
-  (let ((data (make-data "name" "Alice" "age" 30 "email" nil)))
+  (let ((data (make-data "name" "Alice" "age" 30 "email" :null)))
     (multiple-value-bind (valid-p errors)
         (validate-data data (person-schema))
       (ok valid-p)

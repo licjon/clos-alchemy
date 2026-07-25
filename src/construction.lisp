@@ -16,7 +16,8 @@ DATA is a hash table (from JSON parsing). Builds nested objects bottom-up."
     (dolist (field (ir-schema-fields schema))
       (multiple-value-bind (value present-p)
           (gethash (ir-field-name field) data)
-        (when present-p
+        (when (and present-p
+                   (not (and (eq value :null) (wire-nullable-p field))))
           (let ((coerced (%coerce-value value (ir-field-type field)))
                 (initarg (ir-field-initarg field)))
             (if initarg
@@ -40,7 +41,7 @@ DATA is a hash table (from JSON parsing). Builds nested objects bottom-up."
     ht))
 
 (defun %coerce-value (value ir-type)
-  (if (null value)
+  (if (eq value :null)
       nil
       (etypecase ir-type
         (ir-type-primitive (%coerce-primitive value ir-type))
@@ -104,6 +105,6 @@ DATA is a hash table (from JSON parsing). Builds nested objects bottom-up."
   (%construct-object value (ir-type-object-schema ir-type)))
 
 (defun %coerce-nullable (value ir-type)
-  (if (null value)
+  (if (eq value :null)
       nil
       (%coerce-value value (ir-type-nullable-inner-type ir-type))))

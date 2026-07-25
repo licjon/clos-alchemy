@@ -90,7 +90,7 @@
                                           :required-p nil
                                           :nullable-p t
                                           :slot-name 'email))))
-         (data (make-data "name" "Alice" "age" 30 "email" nil))
+         (data (make-data "name" "Alice" "age" 30 "email" :null))
          (instance (construct-from-data data schema)))
     (ok (null (person-email instance)))))
 

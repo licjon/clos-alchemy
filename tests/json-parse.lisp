@@ -54,9 +54,9 @@
   (testing "true parses to :true"
     (let ((result (parse-json-response "{\"active\": true}")))
       (ok (eq :true (gethash "active" result)))))
-  (testing "null still parses to nil"
+  (testing "null parses to :null, not nil, so it is distinguishable from []"
     (let ((result (parse-json-response "{\"email\": null}")))
-      (ok (null (gethash "email" result)))
+      (ok (eq :null (gethash "email" result)))
       (ok (nth-value 1 (gethash "email" result)))))
   (testing "booleans nested in arrays and objects are normalized"
     (let ((result (parse-json-response
