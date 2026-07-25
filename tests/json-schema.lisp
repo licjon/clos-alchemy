@@ -176,3 +176,84 @@
          (props (gethash "properties" js)))
     (ok (string= "Full legal name" (gethash "description" (gethash "name" props))))
     (ok (null (nth-value 1 (gethash "description" (gethash "age" props)))))))
+
+;;; Cyclic schemas — $defs / $ref emission (#1)
+
+(defun make-self-referencing-schema ()
+  (let ((schema (make-ir-schema :name "tree" :class-name 'tree :fields nil)))
+    (setf (ir-schema-fields schema)
+          (list (make-ir-field :name "label"
+                               :type (make-ir-type-primitive :kind :string)
+                               :required-p t
+                               :slot-name 'label)
+                (make-ir-field :name "child"
+                               :type (make-ir-type-object :schema schema)
+                               :required-p nil
+                               :slot-name 'child)))
+    schema))
+
+(defun make-mutual-recursive-schemas ()
+  (let ((schema-a (make-ir-schema :name "node_a" :class-name 'node-a :fields nil))
+        (schema-b (make-ir-schema :name "node_b" :class-name 'node-b :fields nil)))
+    (setf (ir-schema-fields schema-a)
+          (list (make-ir-field :name "child"
+                               :type (make-ir-type-object :schema schema-b)
+                               :required-p t
+                               :slot-name 'child)))
+    (setf (ir-schema-fields schema-b)
+          (list (make-ir-field :name "parent"
+                               :type (make-ir-type-object :schema schema-a)
+                               :required-p t
+                               :slot-name 'parent)))
+    schema-a))
+
+(deftest cyclic/self-ref-terminates
+  (testing "a self-referencing schema must not exhaust the stack"
+    (let ((js (schema-to-json-schema (make-self-referencing-schema))))
+      (ok (hash-table-p js)))))
+
+(deftest cyclic/self-ref-emits-defs-and-ref
+  (let ((js (schema-to-json-schema (make-self-referencing-schema))))
+    (ok (hash-table-p (ht-get js "$defs")))
+    (ok (string= "#/$defs/tree" (ht-get js "$ref")))
+    (let ((def (ht-get (ht-get js "$defs") "tree")))
+      (ok (string= "object" (ht-get def "type")))
+      (ok (hash-table-p (ht-get def "properties"))))))
+
+(deftest cyclic/self-ref-child-is-ref
+  (let* ((js (schema-to-json-schema (make-self-referencing-schema)))
+         (def (ht-get (ht-get js "$defs") "tree"))
+         (child-prop (ht-get (ht-get def "properties") "child"))
+         (first-branch (first (ht-get child-prop "anyOf"))))
+    (ok (string= "#/$defs/tree" (ht-get first-branch "$ref")))))
+
+(deftest cyclic/mutual-recursion-terminates
+  (testing "mutually-recursive schemas must not exhaust the stack"
+    (let ((js (schema-to-json-schema (make-mutual-recursive-schemas))))
+      (ok (hash-table-p js)))))
+
+(deftest cyclic/mutual-recursion-emits-defs
+  (let ((js (schema-to-json-schema (make-mutual-recursive-schemas))))
+    (ok (hash-table-p (ht-get js "$defs")))
+    (ok (string= "#/$defs/node_a" (ht-get js "$ref")))))
+
+(deftest cyclic/mutual-recursion-back-edge-is-ref
+  (let* ((js (schema-to-json-schema (make-mutual-recursive-schemas)))
+         (def-a (ht-get (ht-get js "$defs") "node_a"))
+         (child (ht-get (ht-get def-a "properties") "child"))
+         (parent (ht-get (ht-get child "properties") "parent")))
+    (ok (string= "#/$defs/node_a" (ht-get parent "$ref")))))
+
+(deftest cyclic/serialization-roundtrip
+  (testing "cyclic schema serializes without error"
+    (let* ((js (schema-to-json-schema (make-self-referencing-schema)))
+           (json-string (with-output-to-string (s) (yason:encode js s)))
+           (parsed (yason:parse json-string)))
+      (ok (stringp (ht-get parsed "$ref")))
+      (ok (hash-table-p (ht-get parsed "$defs"))))))
+
+(deftest cyclic/non-cyclic-schema-unchanged
+  (testing "schemas without cycles must not emit $defs"
+    (let ((js (schema-to-json-schema (make-test-schema))))
+      (ok (null (ht-get js "$defs")))
+      (ok (string= "object" (ht-get js "type"))))))

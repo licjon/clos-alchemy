@@ -353,3 +353,41 @@ must not be replaced by the initform"
            (data (parse-json-response "{\"tags\":[]}"))
            (instance (construct-from-data data schema)))
       (ok (null (slot-value instance 'tags))))))
+
+;;; ══════════════════════════════════════════════════════════════════
+;;;  PART E — cyclic schemas must emit valid $defs/$ref (#1)
+;;; ══════════════════════════════════════════════════════════════════
+
+(defclass tree-node ()
+  ((label :type string :initarg :label)
+   (child :type tree-node :initarg :child :initform nil)))
+
+(defclass node-a ()
+  ((child :type node-b :initarg :child)))
+
+(defclass node-b ()
+  ((parent :type node-a :initarg :parent)))
+
+(deftest emitted/self-referencing-class-conforms
+  (ok (conformant-p (schema-to-json-schema (class-to-schema 'tree-node)))))
+
+(deftest emitted/mutual-recursion-conforms
+  (ok (conformant-p (schema-to-json-schema (class-to-schema 'node-a)))))
+
+(deftest emitted/cyclic-schema-serializes-without-error
+  (testing "yason must not infinite-loop on the emitted structure"
+    (let* ((js (schema-to-json-schema (class-to-schema 'tree-node)))
+           (json (encoded js))
+           (parsed (yason:parse json)))
+      (ok (hash-table-p (gethash "$defs" parsed)))
+      (ok (stringp (gethash "$ref" parsed))))))
+
+(deftest emitted/cyclic-optional-field-permits-null
+  (testing "the optional recursive slot must be anyOf [$ref, null]"
+    (let* ((js (schema-to-json-schema (class-to-schema 'tree-node)))
+           (def (gethash "tree_node" (gethash "$defs" js)))
+           (child (gethash "child" (gethash "properties" def)))
+           (branches (gethash "anyOf" child)))
+      (ok (= 2 (length branches)))
+      (ok (stringp (gethash "$ref" (first branches))))
+      (ok (string= "null" (gethash "type" (second branches)))))))
