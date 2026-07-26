@@ -143,6 +143,46 @@
       (ok (null (extraction-result-instance result)))
       (ok (= 0 (extraction-result-retries result))))))
 
+(deftest retries-on-parse-failure-then-succeeds
+  (testing "unparseable response is retried, not fatal"
+    (let* ((backend (make-mock-backend
+                     :responses (list "not json at all"
+                                      (good-data))))
+           (result (extract backend 'item "text" :max-retries 3)))
+      (ok (typep (extraction-result-instance result) 'item))
+      (ok (= 1 (extraction-result-retries result)))
+      (ok (= 2 (mock-backend-calls backend))))))
+
+(deftest retries-on-empty-response-then-succeeds
+  (testing "empty response is retried, not a raw crash"
+    (let* ((backend (make-mock-backend
+                     :responses (list ""
+                                      (good-data))))
+           (result (extract backend 'item "text" :max-retries 3)))
+      (ok (typep (extraction-result-instance result) 'item))
+      (ok (= 1 (extraction-result-retries result)))
+      (ok (= 2 (mock-backend-calls backend))))))
+
+(deftest parse-failures-accumulate-in-max-retries-error
+  (testing "all parse failures end up in max-retries-error errors list"
+    (let ((backend (make-mock-backend
+                    :responses (list "bad1" "bad2"))))
+      (ok (handler-case
+              (progn (extract backend 'item "text" :max-retries 1) nil)
+            (max-retries-error (e)
+              (= 2 (length (max-retries-error-errors e)))))))))
+
+(deftest mixed-parse-and-validation-failures-retry
+  (testing "parse failure then validation failure then success"
+    (let* ((backend (make-mock-backend
+                     :responses (list "Here is your JSON: oops"
+                                      (bad-data-wrong-type)
+                                      (good-data))))
+           (result (extract backend 'item "text" :max-retries 3)))
+      (ok (typep (extraction-result-instance result) 'item))
+      (ok (= 2 (extraction-result-retries result)))
+      (ok (= 3 (mock-backend-calls backend))))))
+
 (deftest pre-compiled-extractor-works
   (testing "compile-extractor result can be reused across calls"
     (let* ((compilation (compile-extractor 'item))
