@@ -31,7 +31,15 @@
 
 (define-condition max-retries-error (extraction-error)
   ((retries :initarg :retries :reader max-retries-error-retries)
-   (errors :initarg :errors :reader max-retries-error-errors))
+   (errors :initarg :errors :reader max-retries-error-errors)
+   (raw-response :initarg :raw-response :reader max-retries-error-raw-response
+                 :initform nil)
+   (raw-data :initarg :raw-data :reader max-retries-error-raw-data
+             :initform nil)
+   (usage :initarg :usage :reader max-retries-error-usage
+          :initform nil)
+   (attempts :initarg :attempts :reader max-retries-error-attempts
+             :initform nil))
   (:report (lambda (c s)
              (format s "Extraction failed after ~D retries with ~D errors"
                      (max-retries-error-retries c)
