@@ -42,24 +42,35 @@ SLOT-TYPES: alist of (slot-name . type-spec) overrides for MOP-reported types."
   "Convert a MOP slot definition to an ir-field."
   (let* ((slot-name (closer-mop:slot-definition-name slot))
          (type-spec (%effective-type slot slot-name slot-types))
-         (list-of-element (%slot-list-of-element slot slot-name slot-types))
-         (initargs (closer-mop:slot-definition-initargs slot))
-         (has-initform (not (null (closer-mop:slot-definition-initfunction slot))))
-         (required-p (and (not (null initargs))
-                          (not has-initform)))
-         (ir-type (if list-of-element
-                      (make-ir-type-list
-                       :element-type (cl-type-to-ir-type list-of-element
-                                                         :schema-cache cache))
-                      (cl-type-to-ir-type type-spec :schema-cache cache)))
-         (nullable-p (ir-type-nullable-p ir-type)))
-    (make-ir-field :name (lisp-name-to-json-name slot-name)
-                   :type ir-type
-                   :required-p required-p
-                   :nullable-p nullable-p
-                   :slot-name slot-name
-                   :initarg (first initargs)
-                   :description (documentation slot t))))
+         (list-of-element (%slot-list-of-element slot slot-name slot-types)))
+    (unless list-of-element
+      (when (null type-spec)
+        (error 'schema-error
+               :class-name class-name
+               :reason (format nil "slot ~A has type NIL (the empty type); use an explicit type or :slot-types to override"
+                               slot-name)))
+      (when (eq type-spec t)
+        (warn "~A slot ~A has no explicit type; defaulting to string. ~
+               Declare a :type or use :slot-types to silence this warning."
+              class-name slot-name)
+        (setf type-spec 'string)))
+    (let* ((initargs (closer-mop:slot-definition-initargs slot))
+           (has-initform (not (null (closer-mop:slot-definition-initfunction slot))))
+           (required-p (and (not (null initargs))
+                            (not has-initform)))
+           (ir-type (if list-of-element
+                        (make-ir-type-list
+                         :element-type (cl-type-to-ir-type list-of-element
+                                                           :schema-cache cache))
+                        (cl-type-to-ir-type type-spec :schema-cache cache)))
+           (nullable-p (ir-type-nullable-p ir-type)))
+      (make-ir-field :name (lisp-name-to-json-name slot-name)
+                     :type ir-type
+                     :required-p required-p
+                     :nullable-p nullable-p
+                     :slot-name slot-name
+                     :initarg (first initargs)
+                     :description (documentation slot t)))))
 
 (defun %effective-type (slot slot-name slot-types)
   "Get the effective type for a slot, checking overrides first."
