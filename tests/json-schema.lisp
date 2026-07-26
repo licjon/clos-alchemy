@@ -3,8 +3,10 @@
 
 (in-package #:clos-alchemy/tests/json-schema)
 
-(defun ht-get (ht key)
-  (gethash key ht))
+(defun ht-get (obj key)
+  (etypecase obj
+    (hash-table (gethash key obj))
+    (ordered-map (ordered-map-get obj key))))
 
 ;;; Helper to build IR schemas for testing without introspection
 
@@ -37,7 +39,7 @@
 (deftest top-level-is-object
   (let ((js (schema-to-json-schema (make-test-schema))))
     (ok (string= "object" (ht-get js "type")))
-    (ok (hash-table-p (ht-get js "properties")))
+    (ok (ordered-map-p (ht-get js "properties")))
     ;; Must serialise to JSON false, not null. NIL here encodes as null, which
     ;; OpenAI strict mode rejects outright (issue #5).
     (ok (eq 'yason:false (ht-get js "additionalProperties")))))
@@ -125,7 +127,7 @@
          (props (ht-get js "properties"))
          (addr-js (ht-get props "address")))
     (ok (string= "object" (ht-get addr-js "type")))
-    (ok (hash-table-p (ht-get addr-js "properties")))
+    (ok (ordered-map-p (ht-get addr-js "properties")))
     (let ((inner-props (ht-get addr-js "properties")))
       (ok (string= "string" (ht-get (ht-get inner-props "street") "type")))
       (ok (string= "string" (ht-get (ht-get inner-props "city") "type"))))))
@@ -174,8 +176,8 @@
                                           :slot-name 'age))))
          (js (schema-to-json-schema schema))
          (props (gethash "properties" js)))
-    (ok (string= "Full legal name" (gethash "description" (gethash "name" props))))
-    (ok (null (nth-value 1 (gethash "description" (gethash "age" props)))))))
+    (ok (string= "Full legal name" (gethash "description" (ht-get props "name"))))
+    (ok (null (nth-value 1 (gethash "description" (ht-get props "age")))))))
 
 ;;; Cyclic schemas — $defs / $ref emission (#1)
 
@@ -218,7 +220,7 @@
     (ok (string= "#/$defs/tree" (ht-get js "$ref")))
     (let ((def (ht-get (ht-get js "$defs") "tree")))
       (ok (string= "object" (ht-get def "type")))
-      (ok (hash-table-p (ht-get def "properties"))))))
+      (ok (ordered-map-p (ht-get def "properties"))))))
 
 (deftest cyclic/self-ref-child-is-ref
   (let* ((js (schema-to-json-schema (make-self-referencing-schema)))
@@ -257,3 +259,111 @@
     (let ((js (schema-to-json-schema (make-test-schema))))
       (ok (null (ht-get js "$defs")))
       (ok (string= "object" (ht-get js "type"))))))
+
+;;; ── Ordered map data structure (issue #8) ──
+
+(deftest ordered-map/encode-preserves-insertion-order
+  (testing "yason:encode on an ordered-map must emit keys in insertion order"
+    (let ((map (make-ordered-map)))
+      (ordered-map-put map "z" 1)
+      (ordered-map-put map "a" 2)
+      (ordered-map-put map "m" 3)
+      (let ((json (with-output-to-string (s) (yason:encode map s))))
+        (ok (search "\"z\"" json))
+        (ok (search "\"a\"" json))
+        (ok (search "\"m\"" json))
+        (ok (< (search "\"z\"" json) (search "\"a\"" json)))
+        (ok (< (search "\"a\"" json) (search "\"m\"" json)))))))
+
+(deftest ordered-map/get-retrieves-by-key
+  (testing "ordered-map-get returns value and presence flag"
+    (let ((map (make-ordered-map)))
+      (ordered-map-put map "x" 42)
+      (ordered-map-put map "y" 99)
+      (multiple-value-bind (val found) (ordered-map-get map "x")
+        (ok (eql 42 val))
+        (ok found))
+      (multiple-value-bind (val found) (ordered-map-get map "missing")
+        (ok (null val))
+        (ok (not found))))))
+
+(deftest ordered-map/empty-encodes-as-empty-object
+  (testing "an ordered-map with no entries must serialize as {}"
+    (let ((json (with-output-to-string (s) (yason:encode (make-ordered-map) s))))
+      (ok (string= "{}" json)))))
+
+(deftest ordered-map/values-can-be-hash-tables
+  (testing "ordered-map values that are hash tables must encode correctly"
+    (let ((map (make-ordered-map))
+          (inner (make-hash-table :test 'equal)))
+      (setf (gethash "type" inner) "string")
+      (ordered-map-put map "name" inner)
+      (let ((json (with-output-to-string (s) (yason:encode map s))))
+        (ok (search "\"name\"" json))
+        (ok (search "\"type\":\"string\"" json))))))
+
+;;; ── Emitter must use ordered-map for properties (issue #8) ──
+
+(deftest properties-is-ordered-map
+  (testing "emitted schema properties must be an ordered-map, not a hash table"
+    (let* ((js (schema-to-json-schema (make-test-schema)))
+           (props (gethash "properties" js)))
+      (ok (ordered-map-p props))
+      (ok (not (hash-table-p props))))))
+
+(deftest properties-order-matches-fields/deliberate-disorder
+  (testing "properties must serialize in field-list order, not alphabetical"
+    (let* ((schema (make-ir-schema
+                    :name "multi"
+                    :fields (list
+                             (make-ir-field :name "delta"
+                                            :type (make-ir-type-primitive :kind :string)
+                                            :required-p t :slot-name 'delta)
+                             (make-ir-field :name "alpha"
+                                            :type (make-ir-type-primitive :kind :integer)
+                                            :required-p t :slot-name 'alpha)
+                             (make-ir-field :name "charlie"
+                                            :type (make-ir-type-primitive :kind :boolean)
+                                            :required-p t :slot-name 'charlie)
+                             (make-ir-field :name "bravo"
+                                            :type (make-ir-type-primitive :kind :string)
+                                            :required-p t :slot-name 'bravo))))
+           (js (schema-to-json-schema schema))
+           (props (gethash "properties" js)))
+      (ok (ordered-map-p props))
+      (let ((json (with-output-to-string (s) (yason:encode js s))))
+        (ok (< (search "\"delta\"" json) (search "\"alpha\"" json)))
+        (ok (< (search "\"alpha\"" json) (search "\"charlie\"" json)))
+        (ok (< (search "\"charlie\"" json) (search "\"bravo\"" json)))))))
+
+(deftest nested-object-properties-are-ordered
+  (testing "nested object schemas must also use ordered-map for properties"
+    (let* ((inner (make-ir-schema
+                   :name "inner" :class-name 'inner
+                   :fields (list
+                            (make-ir-field :name "z_last"
+                                           :type (make-ir-type-primitive :kind :string)
+                                           :required-p t :slot-name 'z-last)
+                            (make-ir-field :name "a_first"
+                                           :type (make-ir-type-primitive :kind :string)
+                                           :required-p t :slot-name 'a-first))))
+           (outer (make-ir-schema
+                   :name "outer" :class-name 'outer
+                   :fields (list
+                            (make-ir-field :name "nested"
+                                           :type (make-ir-type-object :schema inner)
+                                           :required-p t :slot-name 'nested))))
+           (js (schema-to-json-schema outer))
+           (outer-props (gethash "properties" js)))
+      (ok (ordered-map-p outer-props))
+      (when (ordered-map-p outer-props)
+        (let* ((nested-schema (ordered-map-get outer-props "nested"))
+               (inner-props (gethash "properties" nested-schema)))
+          (ok (ordered-map-p inner-props)))))))
+
+(deftest cyclic-schema-properties-are-ordered
+  (testing "$defs entries must use ordered-map for properties"
+    (let* ((js (schema-to-json-schema (make-self-referencing-schema)))
+           (def (gethash "tree" (gethash "$defs" js)))
+           (props (gethash "properties" def)))
+      (ok (ordered-map-p props)))))

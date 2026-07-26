@@ -60,6 +60,10 @@
    #:class-to-schema
    #:lisp-name-to-json-name
 
+   ;; Ordered map
+   #:ordered-map #:ordered-map-p #:ordered-map-entries
+   #:make-ordered-map #:ordered-map-get #:ordered-map-put
+
    ;; JSON Schema
    #:schema-to-json-schema
 

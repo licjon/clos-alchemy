@@ -23,6 +23,12 @@
 
 ;;; ── Test utilities ─────────────────────────────────────────────────
 
+(defun prop-get (props key)
+  "Look up KEY in a properties container (hash-table or ordered-map)."
+  (etypecase props
+    (hash-table (gethash key props))
+    (ordered-map (ordered-map-get props key))))
+
 (defun ht (&rest key-values)
   "Build an EQUAL hash table from a flat key/value list."
   (let ((h (make-hash-table :test 'equal)))
@@ -32,6 +38,28 @@
 (defun object-schema-p (schema)
   (and (hash-table-p schema)
        (equal "object" (gethash "type" schema))))
+
+(defun %props-keys (props)
+  "Collect property keys from a hash-table or ordered-map."
+  (etypecase props
+    (hash-table
+     (let ((keys '()))
+       (maphash (lambda (k v) (declare (ignore v)) (push k keys)) props)
+       keys))
+    (ordered-map
+     (mapcar #'car (ordered-map-entries props)))))
+
+(defun %props-each (props fn)
+  "Call FN with (key value) for each entry in a hash-table or ordered-map."
+  (etypecase props
+    (hash-table (maphash fn props))
+    (ordered-map
+     (dolist (entry (ordered-map-entries props))
+       (funcall fn (car entry) (cdr entry))))))
+
+(defun %props-p (obj)
+  "True when OBJ is a valid properties container (hash-table or ordered-map)."
+  (or (hash-table-p obj) (ordered-map-p obj)))
 
 (defun openai-strict-violations (schema &optional (path "(root)"))
   "Return a list of human-readable violations of OpenAI strict-mode structural
@@ -64,16 +92,15 @@ rules in SCHEMA. An empty list means conformant. Pure — no I/O."
                 (multiple-value-bind (required req-present) (gethash "required" schema)
                   (if (not req-present)
                       (report "'required' must be supplied")
-                      (let ((keys '()))
-                        (maphash (lambda (k v) (declare (ignore v)) (push k keys)) props)
+                      (let ((keys (%props-keys props)))
                         (dolist (k (sort keys #'string<))
                           (unless (member k required :test #'equal)
                             (report "'required' is missing key ~S" k))))))))
 
           ;; Recurse through the object's children.
           (let ((props (gethash "properties" schema)))
-            (when (hash-table-p props)
-              (maphash (lambda (k sub) (recurse sub (format nil "~A.~A" path k))) props)))
+            (when (%props-p props)
+              (%props-each props (lambda (k sub) (recurse sub (format nil "~A.~A" path k))))))
           (let ((ap (gethash "additionalProperties" schema)))
             (when (hash-table-p ap)
               (recurse ap (format nil "~A.<additionalProperties>" path)))))
@@ -281,7 +308,7 @@ rules in SCHEMA. An empty list means conformant. Pure — no I/O."
   (testing "an optional slot must be expressible as null, or the model cannot
 say \"not determinable\" once every key is required"
     (let* ((js (schema-to-json-schema (class-to-schema 'optional-slot)))
-           (nick (gethash "nick" (gethash "properties" js)))
+           (nick (prop-get (gethash "properties" js) "nick"))
            (branches (gethash "anyOf" nick)))
       (ok (listp branches))
       (ok (member "null" branches
@@ -291,7 +318,7 @@ say \"not determinable\" once every key is required"
 (deftest emitted/required-slot-is-not-made-nullable
   (testing "only optional slots gain the null branch"
     (let* ((js (schema-to-json-schema (class-to-schema 'optional-slot)))
-           (reason (gethash "reason" (gethash "properties" js))))
+           (reason (prop-get (gethash "properties" js) "reason")))
       (ok (equal "string" (gethash "type" reason)))
       (ok (null (gethash "anyOf" reason))))))
 
@@ -386,7 +413,7 @@ must not be replaced by the initform"
   (testing "the optional recursive slot must be anyOf [$ref, null]"
     (let* ((js (schema-to-json-schema (class-to-schema 'tree-node)))
            (def (gethash "tree_node" (gethash "$defs" js)))
-           (child (gethash "child" (gethash "properties" def)))
+           (child (prop-get (gethash "properties" def) "child"))
            (branches (gethash "anyOf" child)))
       (ok (= 2 (length branches)))
       (ok (stringp (gethash "$ref" (first branches))))
