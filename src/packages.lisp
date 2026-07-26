@@ -19,7 +19,7 @@
    #:ir-field #:ir-field-p
    #:ir-field-name #:ir-field-type #:ir-field-required-p
    #:ir-field-nullable-p #:ir-field-slot-name #:ir-field-initarg
-   #:ir-field-description
+   #:ir-field-description #:ir-field-validate
    #:make-ir-field
    #:ir-schema #:ir-schema-p
    #:ir-schema-name #:ir-schema-description #:ir-schema-fields
@@ -54,6 +54,7 @@
    ;; Metaclass
    #:constructor-class
    #:slot-definition-list-of
+   #:slot-definition-validate
 
    ;; Type mapping
    #:cl-type-to-ir-type
@@ -71,6 +72,7 @@
 
    ;; Validation
    #:validate-data
+   #:validate-instance
 
    ;; Construction
    #:construct-from-data

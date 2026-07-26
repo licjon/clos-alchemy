@@ -31,8 +31,12 @@ Returns (values valid-p error-list). Errors are collected, not signaled."
                                  :field-name key
                                  :expected (format nil "~A (non-null)" (%type-description (ir-field-type field)))
                                  :actual "null"))))
-      ;; Type check
-      (t (%validate-type value (ir-field-type field) key)))))
+      ;; Type check, then custom validator
+      (t (let ((type-errors (%validate-type value (ir-field-type field) key)))
+           (if type-errors
+               type-errors
+               (%run-slot-validator value (ir-field-type field) key
+                                    (ir-field-validate field))))))))
 
 (defun %validate-type (value ir-type field-name)
   (etypecase ir-type
@@ -91,6 +95,18 @@ Returns (values valid-p error-list). Errors are collected, not signaled."
       nil
       (%validate-type value (ir-type-nullable-inner-type ir-type) field-name)))
 
+(defun %run-slot-validator (value ir-type field-name validator)
+  "Run a per-slot validator predicate on the coerced value.
+Returns nil on success, or a list of validation-error conditions."
+  (when validator
+    (let* ((coerced (%coerce-value value ir-type))
+           (result (funcall validator coerced)))
+      (when (stringp result)
+        (list (make-condition 'validation-error
+                              :field-name field-name
+                              :expected result
+                              :actual (format nil "~S" coerced)))))))
+
 (defun %type-description (ir-type)
   (etypecase ir-type
     (ir-type-primitive (string-downcase (symbol-name (ir-type-primitive-kind ir-type))))
@@ -98,3 +114,10 @@ Returns (values valid-p error-list). Errors are collected, not signaled."
     (ir-type-list "array")
     (ir-type-object "object")
     (ir-type-nullable (format nil "~A or null" (%type-description (ir-type-nullable-inner-type ir-type))))))
+
+;; Must return a list of strings (not conditions) — the extract loop wraps them.
+(defgeneric validate-instance (instance)
+  (:documentation "Validate a constructed instance for semantic constraints.
+Return an empty list for success, or a list of error-description strings.
+Specialize on your class to add cross-field or domain validations.")
+  (:method ((instance t)) '()))

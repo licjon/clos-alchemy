@@ -70,7 +70,8 @@ SLOT-TYPES: alist of (slot-name . type-spec) overrides for MOP-reported types."
                      :nullable-p nullable-p
                      :slot-name slot-name
                      :initarg (first initargs)
-                     :description (documentation slot t)))))
+                     :description (documentation slot t)
+                     :validate (%slot-validate slot)))))
 
 (defun %effective-type (slot slot-name slot-types)
   "Get the effective type for a slot, checking overrides first."
@@ -85,6 +86,15 @@ Slot-types overrides take precedence (no :list-of in that path)."
   (when (and (not (assoc slot-name slot-types))
              (typep slot 'constructor-effective-slot-definition))
     (slot-definition-list-of slot)))
+
+(defun %slot-validate (slot)
+  "Return the :validate function from SLOT if it is a constructor slot, nil otherwise."
+  (when (typep slot 'constructor-effective-slot-definition)
+    (let ((v (slot-definition-validate slot)))
+      (when v
+        (if (functionp v)
+            v
+            (coerce v 'function))))))
 
 (defun %include-slot-p (slot field mode slot-list)
   "Determine whether a slot should be included based on extraction mode."

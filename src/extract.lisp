@@ -86,13 +86,27 @@ Returns an extraction-result whose instance slot is a list."
                        (multiple-value-bind (valid-p errors)
                            (validate-data raw-data schema)
                          (if valid-p
-                             (return-from %extract-with-retry
-                               (make-extraction-result
-                                :instance (construct-from-data raw-data schema)
-                                :raw-data raw-data
-                                :raw-response raw-response
-                                :retries attempt
-                                :usage (%info-to-usage info)))
+                             (let* ((instance (construct-from-data raw-data schema))
+                                    (instance-errors
+                                      (%run-instance-validators instance)))
+                               (if instance-errors
+                                   (progn
+                                     (setf last-raw-data raw-data)
+                                     (push (list :raw-response raw-response
+                                                 :raw-data raw-data
+                                                 :errors (copy-list instance-errors))
+                                           accumulated-attempts)
+                                     (setf accumulated-errors
+                                           (nconc accumulated-errors instance-errors))
+                                     (setf retry-context
+                                           (%format-retry-context instance-errors)))
+                                   (return-from %extract-with-retry
+                                     (make-extraction-result
+                                      :instance instance
+                                      :raw-data raw-data
+                                      :raw-response raw-response
+                                      :retries attempt
+                                      :usage (%info-to-usage info)))))
                              (progn
                                (setf last-raw-data raw-data)
                                (push (list :raw-response raw-response
@@ -139,6 +153,18 @@ Returns an extraction-result whose instance slot is a list."
                                     (or (getf usage :prompt-tokens) 0))
                   :completion-tokens (+ (getf accumulated :completion-tokens)
                                         (or (getf usage :completion-tokens) 0)))))))
+
+(defun %run-instance-validators (instance)
+  "Run validate-instance on the constructed object.
+Returns nil if valid, or a list of validation-error conditions."
+  (let ((error-strings (validate-instance instance)))
+    (when error-strings
+      (mapcar (lambda (msg)
+                (make-condition 'validation-error
+                                :field-name "(instance)"
+                                :expected msg
+                                :actual "constraint violated"))
+              error-strings))))
 
 (defun %format-retry-context (errors)
   "Format validation errors as natural language for the retry prompt."

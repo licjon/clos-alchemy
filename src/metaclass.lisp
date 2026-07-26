@@ -10,11 +10,13 @@
 
 (defclass constructor-direct-slot-definition
     (closer-mop:standard-direct-slot-definition)
-  ((list-of :initarg :list-of :initform nil :reader slot-definition-list-of)))
+  ((list-of  :initarg :list-of  :initform nil :reader slot-definition-list-of)
+   (validate :initarg :validate :initform nil :reader slot-definition-validate)))
 
 (defclass constructor-effective-slot-definition
     (closer-mop:standard-effective-slot-definition)
-  ((list-of :initarg :list-of :initform nil :reader slot-definition-list-of)))
+  ((list-of  :initarg :list-of  :initform nil :reader slot-definition-list-of)
+   (validate :initarg :validate :initform nil :reader slot-definition-validate)))
 
 (defmethod closer-mop:direct-slot-definition-class ((class constructor-class)
                                                      &rest initargs)
@@ -33,7 +35,13 @@
         (list-of-value (loop for dsd in direct-slot-definitions
                              when (and (typep dsd 'constructor-direct-slot-definition)
                                        (slot-definition-list-of dsd))
-                               return (slot-definition-list-of dsd))))
+                               return (slot-definition-list-of dsd)))
+        (validate-value (loop for dsd in direct-slot-definitions
+                              when (and (typep dsd 'constructor-direct-slot-definition)
+                                        (slot-definition-validate dsd))
+                                return (slot-definition-validate dsd))))
     (when list-of-value
       (setf (slot-value effective-slot 'list-of) list-of-value))
+    (when validate-value
+      (setf (slot-value effective-slot 'validate) validate-value))
     effective-slot))

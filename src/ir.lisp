@@ -29,7 +29,8 @@
   (nullable-p nil :type boolean)
   (slot-name nil :type (or symbol null))
   (initarg nil :type (or symbol null))
-  (description nil :type (or string null)))
+  (description nil :type (or string null))
+  (validate nil :type (or function null)))
 
 (defun wire-nullable-p (field)
   "True when FIELD is optional but not declared nullable — the wire format
