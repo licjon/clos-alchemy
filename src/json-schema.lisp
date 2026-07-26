@@ -1,5 +1,31 @@
 (in-package #:clos-alchemy)
 
+;;; Ordered map — insertion-ordered key-value map for JSON Schema properties.
+;;; Guarantees yason:encode emits keys in insertion order (#8).
+
+(defstruct (ordered-map (:copier nil) (:constructor %make-ordered-map))
+  (entries nil :type list))
+
+(defun make-ordered-map ()
+  (%make-ordered-map))
+
+(defun ordered-map-get (map key &optional default)
+  (let ((pair (assoc key (ordered-map-entries map) :test #'equal)))
+    (if pair
+        (values (cdr pair) t)
+        (values default nil))))
+
+(defun ordered-map-put (map key value)
+  (setf (ordered-map-entries map)
+        (nconc (ordered-map-entries map) (list (cons key value))))
+  value)
+
+(defmethod yason:encode ((map ordered-map) &optional (stream *standard-output*))
+  (yason:with-output (stream)
+    (yason:with-object ()
+      (dolist (entry (ordered-map-entries map))
+        (yason:encode-object-element (car entry) (cdr entry))))))
+
 (defun schema-to-json-schema (schema)
   "Translate an ir-schema to a JSON Schema representation (hash table).
 The result is directly serializable via yason:encode.
@@ -29,7 +55,7 @@ Cyclic schema references are expressed via $defs/$ref."
       (return-from %ir-schema-to-json-schema ref-ht)))
   (setf (gethash schema in-progress) t)
   (let ((ht (make-hash-table :test 'equal))
-        (props (make-hash-table :test 'equal))
+        (props (make-ordered-map))
         (required '()))
     (setf (gethash "type" ht) "object")
     (dolist (field (ir-schema-fields schema))
@@ -42,7 +68,7 @@ Cyclic schema references are expressed via $defs/$ref."
         (when (ir-field-description field)
           (setf (gethash "description" field-schema)
                 (ir-field-description field)))
-        (setf (gethash (ir-field-name field) props) field-schema))
+        (ordered-map-put props (ir-field-name field) field-schema))
       (push (ir-field-name field) required))
     (setf (gethash "properties" ht) props)
     (setf (gethash "required" ht) (if required (nreverse required) #()))
