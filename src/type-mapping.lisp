@@ -71,7 +71,13 @@ SLOT-TYPES is unused here (consumed by class-to-schema before calling this)."
       ;; (or null X) — nullable
       ((and (= 1 (length non-null))
             (member 'null members))
-       (make-ir-type-nullable :inner-type (%map-type (first non-null) cache)))
+       (let ((inner (%map-type (first non-null) cache)))
+         (when (and (ir-type-primitive-p inner)
+                    (eq :boolean (ir-type-primitive-kind inner)))
+           (error 'schema-error
+                  :class-name (first non-null)
+                  :reason "(or null boolean) is unrepresentable: CL's NIL conflates JSON false and JSON null"))
+         (make-ir-type-nullable :inner-type inner)))
       ;; (or X Y ...) without null — take first type
       (non-null
        (%map-type (first non-null) cache))

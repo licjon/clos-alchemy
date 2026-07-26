@@ -226,3 +226,20 @@
          (instance (construct-from-data data schema)))
     (ok (vectorp (tagged-thing-tags instance)))
     (ok (equalp #("a" "b") (tagged-thing-tags instance)))))
+
+;;; Non-nullable boolean coercion — :true → T, :false → NIL
+
+(defclass has-flag ()
+  ((flag :initarg :flag :accessor has-flag-flag :type boolean)))
+
+(deftest boolean-true-coerces-to-t
+  (let* ((schema (class-to-schema 'has-flag))
+         (data (make-data "flag" :true))
+         (instance (construct-from-data data schema)))
+    (ok (eq t (has-flag-flag instance)))))
+
+(deftest boolean-false-coerces-to-nil
+  (let* ((schema (class-to-schema 'has-flag))
+         (data (make-data "flag" :false))
+         (instance (construct-from-data data schema)))
+    (ok (eq nil (has-flag-flag instance)))))
