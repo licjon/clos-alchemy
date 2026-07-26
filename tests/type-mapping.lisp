@@ -73,6 +73,20 @@
     (ok (ir-type-nullable-p ir))
     (ok (eq :integer (ir-type-primitive-kind (ir-type-nullable-inner-type ir))))))
 
+;;; Nullable boolean — unrepresentable in CL, must signal schema-error
+
+(deftest or-null-boolean-signals-schema-error
+  (testing "(or null boolean) signals schema-error because CL NIL conflates false and null"
+    (ok (handler-case
+            (progn (cl-type-to-ir-type '(or null boolean)) nil)
+          (schema-error () t)))))
+
+(deftest or-boolean-null-signals-schema-error
+  (testing "(or boolean null) — reversed order — also signals schema-error"
+    (ok (handler-case
+            (progn (cl-type-to-ir-type '(or boolean null)) nil)
+          (schema-error () t)))))
+
 ;;; List types
 
 (deftest plain-list

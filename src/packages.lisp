@@ -3,6 +3,7 @@
   (:export
    ;; IR type nodes
    #:ir-type-primitive #:ir-type-primitive-p #:ir-type-primitive-kind
+   #:ir-type-primitive-numeric-type
    #:make-ir-type-primitive
    #:ir-type-enum #:ir-type-enum-p #:ir-type-enum-values
    #:make-ir-type-enum

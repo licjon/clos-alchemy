@@ -3,7 +3,8 @@
 ;;; Type nodes — tagged union pattern inspired by C2FFI's AST
 
 (defstruct (ir-type-primitive (:copier nil))
-  (kind :string :type (member :string :integer :number :boolean)))
+  (kind :string :type (member :string :integer :number :boolean))
+  (numeric-type nil :type (or symbol null)))
 
 (defstruct (ir-type-enum (:copier nil))
   (values nil :type list))
