@@ -48,6 +48,8 @@
    #:validation-error-expected #:validation-error-actual
    #:generation-error #:generation-error-backend #:generation-error-reason
    #:max-retries-error #:max-retries-error-retries #:max-retries-error-errors
+   #:max-retries-error-raw-response #:max-retries-error-raw-data
+   #:max-retries-error-usage #:max-retries-error-attempts
 
    ;; Metaclass
    #:constructor-class

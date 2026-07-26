@@ -193,3 +193,110 @@
       (ok (typep (extraction-result-instance r1) 'item))
       (ok (typep (extraction-result-instance r2) 'item))
       (ok (= 2 (mock-backend-calls backend))))))
+
+;;; ── max-retries-error enrichment (issue #4) ──────────────────────
+
+(deftest max-retries-error-carries-last-raw-response
+  (testing "raw-response is the string from the final attempt"
+    (let ((backend (make-mock-backend
+                    :responses (list (bad-data-wrong-type)
+                                     (bad-data-missing-field)))))
+      (handler-case
+          (progn (extract backend 'item "text" :max-retries 1) nil)
+        (max-retries-error (e)
+          (ok (string= (bad-data-missing-field)
+                        (max-retries-error-raw-response e))))))))
+
+(deftest max-retries-error-carries-last-raw-data
+  (testing "raw-data is the parsed hash-table when the last attempt parsed"
+    (let ((backend (make-mock-backend
+                    :responses (list (bad-data-wrong-type)
+                                     (bad-data-missing-field)))))
+      (handler-case
+          (progn (extract backend 'item "text" :max-retries 1) nil)
+        (max-retries-error (e)
+          (let ((data (max-retries-error-raw-data e)))
+            (ok (hash-table-p data))
+            (ok (string= "widget" (gethash "name" data)))
+            (ok (null (gethash "count" data)))))))))
+
+(deftest max-retries-error-raw-data-nil-on-parse-failure
+  (testing "raw-data is nil when the last attempt failed to parse"
+    (let ((backend (make-mock-backend
+                    :responses (list "not json" "also not json"))))
+      (handler-case
+          (progn (extract backend 'item "text" :max-retries 1) nil)
+        (max-retries-error (e)
+          (ok (null (max-retries-error-raw-data e)))
+          (ok (string= "also not json"
+                        (max-retries-error-raw-response e))))))))
+
+(deftest max-retries-error-carries-cumulative-usage
+  (testing "usage is present and structured across all failed attempts"
+    (let ((backend (make-mock-backend
+                    :responses (list (bad-data-wrong-type)
+                                     (bad-data-wrong-type)))))
+      (handler-case
+          (progn (extract backend 'item "text" :max-retries 1) nil)
+        (max-retries-error (e)
+          (let ((usage (max-retries-error-usage e)))
+            (ok (not (null usage)))
+            (ok (numberp (getf usage :prompt-tokens)))
+            (ok (numberp (getf usage :completion-tokens)))))))))
+
+(deftest max-retries-error-carries-per-attempt-records
+  (testing "attempts list has one entry per attempt with attribution"
+    (let ((backend (make-mock-backend
+                    :responses (list (bad-data-wrong-type)
+                                     (bad-data-missing-field)))))
+      (handler-case
+          (progn (extract backend 'item "text" :max-retries 1) nil)
+        (max-retries-error (e)
+          (let ((attempts (max-retries-error-attempts e)))
+            (ok (= 2 (length attempts)))
+            (ok (string= (bad-data-wrong-type)
+                          (getf (first attempts) :raw-response)))
+            (ok (hash-table-p (getf (first attempts) :raw-data)))
+            (ok (= 1 (length (getf (first attempts) :errors))))
+            (ok (string= (bad-data-missing-field)
+                          (getf (second attempts) :raw-response)))
+            (ok (hash-table-p (getf (second attempts) :raw-data)))))))))
+
+(deftest max-retries-error-attempts-with-parse-failures
+  (testing "parse failure attempts have nil raw-data"
+    (let ((backend (make-mock-backend
+                    :responses (list "not json"
+                                     (bad-data-wrong-type)))))
+      (handler-case
+          (progn (extract backend 'item "text" :max-retries 1) nil)
+        (max-retries-error (e)
+          (let ((attempts (max-retries-error-attempts e)))
+            (ok (= 2 (length attempts)))
+            (ok (string= "not json" (getf (first attempts) :raw-response)))
+            (ok (null (getf (first attempts) :raw-data)))
+            (ok (= 1 (length (getf (first attempts) :errors))))
+            (ok (hash-table-p (getf (second attempts) :raw-data)))
+            (ok (= 1 (length (getf (second attempts) :errors))))))))))
+
+(deftest max-retries-error-attempts-single-attempt
+  (testing "max-retries 0 yields one attempt record"
+    (let ((backend (make-mock-backend
+                    :responses (list (bad-data-wrong-type)))))
+      (handler-case
+          (progn (extract backend 'item "text" :max-retries 0) nil)
+        (max-retries-error (e)
+          (let ((attempts (max-retries-error-attempts e)))
+            (ok (= 1 (length attempts)))
+            (ok (= 1 (length (getf (first attempts) :errors))))))))))
+
+(deftest max-retries-error-errors-still-flat
+  (testing "errors slot is still a flat list for backward compatibility"
+    (let ((backend (make-mock-backend
+                    :responses (list "not json"
+                                     (bad-data-wrong-type)
+                                     (bad-data-missing-field)))))
+      (handler-case
+          (progn (extract backend 'item "text" :max-retries 2) nil)
+        (max-retries-error (e)
+          (ok (= 3 (length (max-retries-error-errors e))))
+          (ok (listp (max-retries-error-errors e))))))))

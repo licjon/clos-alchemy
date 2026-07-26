@@ -60,6 +60,10 @@ Returns an extraction-result whose instance slot is a list."
          (system-prompt (extraction-compilation-prompt compilation))
          (json-schema (schema-to-json-schema schema))
          (accumulated-errors '())
+         (accumulated-attempts '())
+         (accumulated-usage nil)
+         (last-raw-response nil)
+         (last-raw-data nil)
          (retry-context nil))
     (loop for attempt from 0 to max-retries
           do (let* ((user-content
@@ -75,6 +79,8 @@ Returns an extraction-result whose instance slot is a list."
                                          :output-schema json-schema
                                          :temperature temperature
                                          :max-tokens (or max-tokens 1024))
+                 (setf last-raw-response raw-response)
+                 (setf accumulated-usage (%accumulate-usage accumulated-usage info))
                  (handler-case
                      (let ((raw-data (parse-json-response raw-response)))
                        (multiple-value-bind (valid-p errors)
@@ -88,24 +94,51 @@ Returns an extraction-result whose instance slot is a list."
                                 :retries attempt
                                 :usage (%info-to-usage info)))
                              (progn
+                               (setf last-raw-data raw-data)
+                               (push (list :raw-response raw-response
+                                           :raw-data raw-data
+                                           :errors (copy-list errors))
+                                     accumulated-attempts)
                                (setf accumulated-errors
                                      (nconc accumulated-errors errors))
                                (setf retry-context
                                      (%format-retry-context errors))))))
                    (generation-error (e)
-                     (push (format nil "Parse failure: ~A"
-                                   (generation-error-reason e))
-                           accumulated-errors)
+                     (setf last-raw-data nil)
+                     (let ((err (format nil "Parse failure: ~A"
+                                        (generation-error-reason e))))
+                       (push err accumulated-errors)
+                       (push (list :raw-response raw-response
+                                   :raw-data nil
+                                   :errors (list err))
+                             accumulated-attempts))
                      (setf retry-context
                            (%format-parse-retry-context e raw-response)))))))
     (error 'max-retries-error
            :retries max-retries
-           :errors accumulated-errors)))
+           :errors accumulated-errors
+           :raw-response last-raw-response
+           :raw-data last-raw-data
+           :usage accumulated-usage
+           :attempts (nreverse accumulated-attempts))))
 
 (defun %info-to-usage (info)
   (when info
     (list :prompt-tokens (llm:response-info-prompt-tokens info)
           :completion-tokens (llm:response-info-completion-tokens info))))
+
+(defun %accumulate-usage (accumulated info)
+  (let ((usage (%info-to-usage info)))
+    (if (null accumulated)
+        (when usage
+          (list :prompt-tokens (or (getf usage :prompt-tokens) 0)
+                :completion-tokens (or (getf usage :completion-tokens) 0)))
+        (if (null usage)
+            accumulated
+            (list :prompt-tokens (+ (getf accumulated :prompt-tokens)
+                                    (or (getf usage :prompt-tokens) 0))
+                  :completion-tokens (+ (getf accumulated :completion-tokens)
+                                        (or (getf usage :completion-tokens) 0)))))))
 
 (defun %format-retry-context (errors)
   "Format validation errors as natural language for the retry prompt."
