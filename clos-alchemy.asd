@@ -15,8 +15,8 @@
                  (:file "metaclass")
                  (:file "introspection")
                  (:file "json-schema")
-                 (:file "validation")
                  (:file "construction")
+                 (:file "validation")
                  (:file "prompt")
                  (:file "json-parse")
                  (:file "extract")))))
@@ -38,7 +38,8 @@
                  (:file "extract")
                  (:file "security")
                  (:file "unsupported-types")
-                 (:file "schema-conformance"))))
+                 (:file "schema-conformance")
+                 (:file "custom-validation"))))
   :perform (test-op (op c) (symbol-call :rove :run c)))
 
 ;;; Gated: needs llama.cpp built as a shared library, so it stays out of the
@@ -57,4 +58,5 @@
   :components ((:module "examples"
                 :components
                 ((:file "extract-llama")
-                 (:file "classify-llama")))))
+                 (:file "classify-llama")
+                 (:file "validate-llama")))))
