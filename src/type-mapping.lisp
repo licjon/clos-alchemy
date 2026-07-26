@@ -10,13 +10,17 @@ SLOT-TYPES is unused here (consumed by class-to-schema before calling this)."
 
 (defun %map-type (spec cache)
   (cond
-    ;; NIL type (empty type) — treat as string
+    ;; NIL — the empty type; no value can inhabit it
     ((null spec)
-     (make-ir-type-primitive :kind :string))
+     (error 'schema-error
+            :class-name spec
+            :reason "type NIL (the empty type) cannot be mapped to JSON — use an explicit type or :slot-types"))
 
-    ;; T or absent — default to string
+    ;; T — "any object"; not representable in JSON Schema
     ((eq spec t)
-     (make-ir-type-primitive :kind :string))
+     (error 'schema-error
+            :class-name spec
+            :reason "type T cannot be mapped to JSON — use an explicit type or :slot-types"))
 
     ;; Compound type specifiers
     ((consp spec)
@@ -80,9 +84,12 @@ SLOT-TYPES is unused here (consumed by class-to-schema before calling this)."
                   :class-name (first non-null)
                   :reason "(or null boolean) is unrepresentable: CL's NIL conflates JSON false and JSON null"))
          (make-ir-type-nullable :inner-type inner)))
-      ;; (or X Y ...) without null — take first type
+      ;; (or X Y ...) without null — cannot faithfully represent a general union
       (non-null
-       (%map-type (first non-null) cache))
+       (error 'schema-error
+              :class-name (cons 'or members)
+              :reason (format nil "general union types are not supported — members ~{~S~^, ~} would be silently narrowed; use :slot-types to override"
+                              non-null)))
       ;; (or null) — just null, treat as nullable string
       (t
        (make-ir-type-nullable

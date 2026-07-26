@@ -141,3 +141,47 @@
          (age-f (find "age" fields :key #'ir-field-name :test #'string=)))
     (ok (string= "The person's full legal name" (ir-field-description name-f)))
     (ok (null (ir-field-description age-f)))))
+
+;;; Untyped slots default to string with a warning (issue #10)
+
+(defclass untyped-slot ()
+  ((val :initarg :val)))
+
+(deftest untyped-slot-defaults-to-string-with-warning
+  (testing "untyped slot maps to string and emits a warning"
+    (let ((warned nil))
+      (handler-bind ((warning (lambda (w)
+                                (setf warned t)
+                                (muffle-warning w))))
+        (let* ((schema (class-to-schema 'untyped-slot))
+               (fields (ir-schema-fields schema))
+               (val-f (find "val" fields :key #'ir-field-name :test #'string=)))
+          (ok warned)
+          (ok (ir-type-primitive-p (ir-field-type val-f)))
+          (ok (eq :string (ir-type-primitive-kind (ir-field-type val-f)))))))))
+
+;;; NIL-typed slots signal schema-error (issue #10)
+
+(defclass nil-typed-slot ()
+  ((val :initarg :val :type nil)))
+
+(deftest nil-typed-slot-signals-schema-error
+  (ok (handler-case
+          (progn (class-to-schema 'nil-typed-slot) nil)
+        (schema-error () t))))
+
+;;; :slot-types overrides bypass the t/nil checks
+
+(deftest slot-types-override-bypasses-untyped-warning
+  (testing ":slot-types silences the untyped-slot warning"
+    (let ((warned nil))
+      (handler-bind ((warning (lambda (w)
+                                (setf warned t)
+                                (muffle-warning w))))
+        (let* ((schema (class-to-schema 'untyped-slot
+                                        :slot-types '((val . integer))))
+               (fields (ir-schema-fields schema))
+               (val-f (find "val" fields :key #'ir-field-name :test #'string=)))
+          (ok (not warned))
+          (ok (ir-type-primitive-p (ir-field-type val-f)))
+          (ok (eq :integer (ir-type-primitive-kind (ir-field-type val-f)))))))))

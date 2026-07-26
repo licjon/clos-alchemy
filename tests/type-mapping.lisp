@@ -35,12 +35,17 @@
     (ok (ir-type-primitive-p ir))
     (ok (eq :boolean (ir-type-primitive-kind ir)))))
 
-;;; T and absent default to string
+;;; T and NIL signal schema-error (no silent fallback to string)
 
-(deftest t-defaults-to-string
-  (let ((ir (cl-type-to-ir-type t)))
-    (ok (ir-type-primitive-p ir))
-    (ok (eq :string (ir-type-primitive-kind ir)))))
+(deftest t-signals-schema-error
+  (ok (handler-case
+          (progn (cl-type-to-ir-type t) nil)
+        (schema-error () t))))
+
+(deftest nil-signals-schema-error
+  (ok (handler-case
+          (progn (cl-type-to-ir-type nil) nil)
+        (schema-error () t))))
 
 ;;; Enum types
 
@@ -106,6 +111,26 @@
     (ok (ir-type-object-p ir))
     (ok (ir-schema-p (ir-type-object-schema ir)))
     (ok (eq 'test-address (ir-schema-class-name (ir-type-object-schema ir))))))
+
+;;; General union types signal schema-error (issue #6)
+
+(deftest or-multi-member-signals-schema-error
+  (testing "(or string integer) — general union, not nullable"
+    (ok (handler-case
+            (progn (cl-type-to-ir-type '(or string integer)) nil)
+          (schema-error () t)))))
+
+(deftest or-multi-member-with-null-signals-schema-error
+  (testing "(or null string integer) — nullable but still multi-member"
+    (ok (handler-case
+            (progn (cl-type-to-ir-type '(or null string integer)) nil)
+          (schema-error () t)))))
+
+(deftest or-null-single-member-still-works
+  (testing "(or null string) — genuine nullable, not a general union"
+    (let ((ir (cl-type-to-ir-type '(or null string))))
+      (ok (ir-type-nullable-p ir))
+      (ok (eq :string (ir-type-primitive-kind (ir-type-nullable-inner-type ir)))))))
 
 ;;; Unsupported types signal schema-error
 
