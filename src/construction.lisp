@@ -57,9 +57,11 @@ DATA is a hash table (from JSON parsing). Builds nested objects bottom-up."
                 (integer value)
                 (number (truncate value))
                 (string (parse-integer value))))
-    (:number (etypecase value
-               (number value)
-               (string (%safe-parse-number value))))
+    (:number (let ((n (etypecase value
+                       (number value)
+                       (string (%safe-parse-number value))))
+                   (target (ir-type-primitive-numeric-type ir-type)))
+               (if target (coerce n target) n)))
     (:boolean (cond
                 ((member value '(t :true) :test #'eq) t)
                 ((member value '(nil :false) :test #'eq) nil)
@@ -81,9 +83,10 @@ DATA is a hash table (from JSON parsing). Builds nested objects bottom-up."
              (parse-integer string :start (1+ pos) :junk-allowed t)
            (if (and frac (= frac-end end))
                (let ((divisor (expt 10 (- frac-end (1+ pos)))))
-                 (if (char= (char string 0) #\-)
-                     (- integer (/ frac divisor))
-                     (+ integer (/ frac divisor))))
+                 (coerce (if (char= (char string 0) #\-)
+                             (- integer (/ frac divisor))
+                             (+ integer (/ frac divisor)))
+                         'double-float))
                (error 'generation-error :backend :coerce
                       :reason (format nil "invalid number: ~S" string)))))
         (t (error 'generation-error :backend :coerce

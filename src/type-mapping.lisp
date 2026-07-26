@@ -45,7 +45,9 @@ SLOT-TYPES is unused here (consumed by class-to-schema before calling this)."
         :container :vector))
       ((integer unsigned-byte signed-byte mod)
        (make-ir-type-primitive :kind :integer))
-      ((float single-float double-float short-float long-float real rational)
+      ((float single-float double-float short-float long-float)
+       (make-ir-type-primitive :kind :number :numeric-type (%float-numeric-type head)))
+      ((real rational)
        (make-ir-type-primitive :kind :number))
       ((string base-string simple-string simple-base-string)
        (make-ir-type-primitive :kind :string))
@@ -86,6 +88,12 @@ SLOT-TYPES is unused here (consumed by class-to-schema before calling this)."
        (make-ir-type-nullable
         :inner-type (make-ir-type-primitive :kind :string))))))
 
+(defun %float-numeric-type (spec)
+  (case spec
+    ((single-float short-float) 'single-float)
+    ((double-float long-float) 'double-float)
+    (t 'single-float)))
+
 (defun %map-named-type (spec cache)
   (cond
     ;; String types
@@ -96,9 +104,12 @@ SLOT-TYPES is unused here (consumed by class-to-schema before calling this)."
     ((member spec '(integer fixnum bignum bit unsigned-byte signed-byte))
      (make-ir-type-primitive :kind :integer))
 
-    ;; Float/number types
-    ((member spec '(float single-float double-float short-float long-float
-                    number real rational))
+    ;; Float types — carry numeric-type for coercion
+    ((member spec '(float single-float double-float short-float long-float))
+     (make-ir-type-primitive :kind :number :numeric-type (%float-numeric-type spec)))
+
+    ;; Generic number types — no coercion target
+    ((member spec '(number real rational))
      (make-ir-type-primitive :kind :number))
 
     ;; Boolean

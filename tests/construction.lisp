@@ -243,3 +243,58 @@
          (data (make-data "flag" :false))
          (instance (construct-from-data data schema)))
     (ok (eq nil (has-flag-flag instance)))))
+
+;;; Numeric coercion — integers into float-typed slots
+
+(defclass double-holder ()
+  ((amount :initarg :amount :accessor dh-amount :type double-float)))
+
+(deftest integer-coerced-to-double-float
+  (testing "an integer in a double-float slot is coerced to double-float"
+    (let* ((schema (class-to-schema 'double-holder))
+           (data (make-data "amount" 2))
+           (instance (construct-from-data data schema)))
+      (ok (typep (dh-amount instance) 'double-float))
+      (ok (= 2.0d0 (dh-amount instance))))))
+
+(defclass single-holder ()
+  ((value :initarg :value :accessor sh-value :type single-float)))
+
+(deftest integer-coerced-to-single-float
+  (testing "an integer in a single-float slot is coerced to single-float"
+    (let* ((schema (class-to-schema 'single-holder))
+           (data (make-data "value" 5))
+           (instance (construct-from-data data schema)))
+      (ok (typep (sh-value instance) 'single-float))
+      (ok (= 5.0 (sh-value instance))))))
+
+(defclass number-holder ()
+  ((n :initarg :n :accessor nh-n :type number)))
+
+(deftest integer-stays-integer-in-number-slot
+  (testing "an integer in a generic number slot is not coerced to float"
+    (let* ((schema (class-to-schema 'number-holder))
+           (data (make-data "n" 42))
+           (instance (construct-from-data data schema)))
+      (ok (integerp (nh-n instance)))
+      (ok (= 42 (nh-n instance))))))
+
+;;; %safe-parse-number: decimal → float, not ratio
+
+(deftest safe-parse-number-decimal-returns-float
+  (testing "decimal strings parse to double-float, not ratios"
+    (let ((result (clos-alchemy::%safe-parse-number "1.5")))
+      (ok (floatp result))
+      (ok (= 1.5d0 result)))))
+
+(deftest safe-parse-number-negative-decimal-returns-float
+  (testing "negative decimal strings parse to double-float"
+    (let ((result (clos-alchemy::%safe-parse-number "-1.25")))
+      (ok (floatp result))
+      (ok (= -1.25d0 result)))))
+
+(deftest safe-parse-number-integer-stays-integer
+  (testing "integer strings still parse to integers"
+    (let ((result (clos-alchemy::%safe-parse-number "42")))
+      (ok (integerp result))
+      (ok (= 42 result)))))

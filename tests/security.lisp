@@ -106,17 +106,19 @@
       (ok (= -7 (person-score instance))))))
 
 (deftest safe-parse-float-string
-  (testing "string decimals still coerce correctly"
+  (testing "string decimals coerce to double-float, not ratios"
     (let ((schema (number-schema))
           (data (make-data "name" "Alice" "age" 30 "score" "3.14")))
       (let ((instance (construct-from-data data schema)))
-        (ok (= 157/50 (person-score instance)))))))
+        (ok (floatp (person-score instance)))
+        (ok (= 3.14d0 (person-score instance)))))))
 
 (deftest safe-parse-negative-float-string
   (let ((schema (number-schema))
         (data (make-data "name" "Alice" "age" 30 "score" "-2.5")))
     (let ((instance (construct-from-data data schema)))
-      (ok (= -5/2 (person-score instance))))))
+      (ok (floatp (person-score instance)))
+      (ok (= -2.5d0 (person-score instance))))))
 
 ;;; ── Enum interning: validation gates construction ──────────────────
 
