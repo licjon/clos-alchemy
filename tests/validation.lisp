@@ -265,3 +265,65 @@
         (validate-data data schema)
       (ok (not valid-p))
       (ok (= 1 (length errors))))))
+
+;;; Map validation
+
+(deftest map-field-validates-hash-table
+  (let* ((schema (make-ir-schema
+                  :name "config"
+                  :fields (list
+                           (make-ir-field :name "settings"
+                                          :type (make-ir-type-map
+                                                 :value-type (make-ir-type-primitive :kind :string))
+                                          :required-p t
+                                          :slot-name 'settings))))
+         (data (make-data "settings" (make-data "key1" "val1" "key2" "val2"))))
+    (multiple-value-bind (valid-p errors)
+        (validate-data data schema)
+      (ok valid-p)
+      (ok (null errors)))))
+
+(deftest map-field-rejects-non-hash-table
+  (let* ((schema (make-ir-schema
+                  :name "config"
+                  :fields (list
+                           (make-ir-field :name "settings"
+                                          :type (make-ir-type-map
+                                                 :value-type (make-ir-type-primitive :kind :string))
+                                          :required-p t
+                                          :slot-name 'settings))))
+         (data (make-data "settings" "not-a-map")))
+    (multiple-value-bind (valid-p errors)
+        (validate-data data schema)
+      (ok (not valid-p))
+      (ok (= 1 (length errors))))))
+
+(deftest map-field-rejects-wrong-value-type
+  (let* ((schema (make-ir-schema
+                  :name "config"
+                  :fields (list
+                           (make-ir-field :name "settings"
+                                          :type (make-ir-type-map
+                                                 :value-type (make-ir-type-primitive :kind :string))
+                                          :required-p t
+                                          :slot-name 'settings))))
+         (data (make-data "settings" (make-data "key1" "valid" "key2" 42))))
+    (multiple-value-bind (valid-p errors)
+        (validate-data data schema)
+      (ok (not valid-p))
+      (ok (= 1 (length errors))))))
+
+(deftest map-field-accepts-empty-map
+  (let* ((schema (make-ir-schema
+                  :name "config"
+                  :fields (list
+                           (make-ir-field :name "settings"
+                                          :type (make-ir-type-map
+                                                 :value-type (make-ir-type-primitive :kind :string))
+                                          :required-p t
+                                          :slot-name 'settings))))
+         (data (make-data "settings" (make-data))))
+    (multiple-value-bind (valid-p errors)
+        (validate-data data schema)
+      (ok valid-p)
+      (ok (null errors)))))

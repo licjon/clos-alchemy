@@ -45,7 +45,8 @@ Returns (values valid-p error-list). Errors are collected, not signaled."
     (ir-type-list (%validate-list value ir-type field-name))
     (ir-type-object (%validate-object value ir-type field-name))
     (ir-type-nullable (%validate-nullable value ir-type field-name))
-    (ir-type-date (%validate-date value ir-type field-name))))
+    (ir-type-date (%validate-date value ir-type field-name))
+    (ir-type-map (%validate-map value ir-type field-name))))
 
 (defun %validate-primitive (value ir-type field-name)
   (let ((kind (ir-type-primitive-kind ir-type)))
@@ -95,6 +96,20 @@ Returns (values valid-p error-list). Errors are collected, not signaled."
   (if (eq value :null)
       nil
       (%validate-type value (ir-type-nullable-inner-type ir-type) field-name)))
+
+(defun %validate-map (value ir-type field-name)
+  (if (not (hash-table-p value))
+      (list (make-condition 'validation-error
+                            :field-name field-name
+                            :expected "object (map)"
+                            :actual (format nil "~S" value)))
+      (let ((errors '()))
+        (maphash (lambda (k v)
+                   (let ((key-errors (%validate-type v (ir-type-map-value-type ir-type)
+                                                     (format nil "~A.~A" field-name k))))
+                     (setf errors (nconc errors key-errors))))
+                 value)
+        errors)))
 
 (defun %validate-date (value ir-type field-name)
   (if (not (stringp value))
@@ -231,7 +246,8 @@ Returns nil on success, or a list of validation-error conditions."
     (ir-type-nullable (format nil "~A or null" (%type-description (ir-type-nullable-inner-type ir-type))))
     (ir-type-date (ecase (ir-type-date-format ir-type)
                     (:date "date")
-                    (:date-time "date-time")))))
+                    (:date-time "date-time")))
+    (ir-type-map "map")))
 
 ;; Must return a list of strings (not conditions) — the extract loop wraps them.
 (defgeneric validate-instance (instance)

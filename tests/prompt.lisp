@@ -107,3 +107,18 @@
     (ok (search "How urgent the ticket is" prompt))
     (ok (search "\"low\"" prompt))
     (ok (search "\"high\"" prompt))))
+
+;;; Map types in prompts
+
+(deftest prompt-contains-map-type-info
+  (let* ((schema (make-ir-schema
+                  :name "config"
+                  :fields (list
+                           (make-ir-field :name "settings"
+                                          :type (make-ir-type-map
+                                                 :value-type (make-ir-type-primitive :kind :string))
+                                          :required-p t
+                                          :slot-name 'settings))))
+         (prompt (generate-system-prompt schema)))
+    (ok (search "map" prompt))
+    (ok (search "settings" prompt))))
