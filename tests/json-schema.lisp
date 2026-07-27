@@ -416,3 +416,61 @@
            (def (gethash "tree" (gethash "$defs" js)))
            (props (gethash "properties" def)))
       (ok (ordered-map-p props)))))
+
+;;; ── Map type — additionalProperties as a schema ────────────────────
+
+(deftest map-schema
+  (let* ((schema (make-ir-schema
+                  :name "config"
+                  :fields (list
+                           (make-ir-field :name "settings"
+                                          :type (make-ir-type-map
+                                                 :value-type (make-ir-type-primitive :kind :string))
+                                          :required-p t
+                                          :slot-name 'settings))))
+         (js (schema-to-json-schema schema))
+         (props (ht-get js "properties"))
+         (settings-js (ht-get props "settings")))
+    (ok (string= "object" (ht-get settings-js "type")))
+    ;; Must have empty properties and required for OpenAI strict mode
+    (multiple-value-bind (p present) (gethash "properties" settings-js)
+      (ok present)
+      (ok (zerop (hash-table-count p))))
+    (ok (equalp #() (ht-get settings-js "required")))
+    ;; additionalProperties must be the value type schema
+    (let ((ap (ht-get settings-js "additionalProperties")))
+      (ok (hash-table-p ap))
+      (ok (string= "string" (ht-get ap "type"))))))
+
+(deftest map-schema-with-integer-values
+  (let* ((schema (make-ir-schema
+                  :name "scores"
+                  :fields (list
+                           (make-ir-field :name "scores"
+                                          :type (make-ir-type-map
+                                                 :value-type (make-ir-type-primitive :kind :integer))
+                                          :required-p t
+                                          :slot-name 'scores))))
+         (js (schema-to-json-schema schema))
+         (props (ht-get js "properties"))
+         (scores-js (ht-get props "scores"))
+         (ap (ht-get scores-js "additionalProperties")))
+    (ok (string= "integer" (ht-get ap "type")))))
+
+(deftest map-schema-serialization-roundtrip
+  (let* ((schema (make-ir-schema
+                  :name "config"
+                  :fields (list
+                           (make-ir-field :name "settings"
+                                          :type (make-ir-type-map
+                                                 :value-type (make-ir-type-primitive :kind :string))
+                                          :required-p t
+                                          :slot-name 'settings))))
+         (js (schema-to-json-schema schema))
+         (json-string (with-output-to-string (s) (yason:encode js s)))
+         (parsed (yason:parse json-string))
+         (settings (gethash "settings" (gethash "properties" parsed))))
+    (ok (string= "object" (gethash "type" settings)))
+    (ok (hash-table-p (gethash "properties" settings)))
+    (ok (zerop (hash-table-count (gethash "properties" settings))))
+    (ok (string= "string" (gethash "type" (gethash "additionalProperties" settings))))))

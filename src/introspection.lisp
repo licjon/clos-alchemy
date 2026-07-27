@@ -42,8 +42,9 @@ SLOT-TYPES: alist of (slot-name . type-spec) overrides for MOP-reported types."
   "Convert a MOP slot definition to an ir-field."
   (let* ((slot-name (closer-mop:slot-definition-name slot))
          (type-spec (%effective-type slot slot-name slot-types))
-         (list-of-element (%slot-list-of-element slot slot-name slot-types)))
-    (unless list-of-element
+         (list-of-element (%slot-list-of-element slot slot-name slot-types))
+         (map-of-value (%slot-map-of-value slot slot-name slot-types)))
+    (unless (or list-of-element map-of-value)
       (when (null type-spec)
         (error 'schema-error
                :class-name class-name
@@ -58,11 +59,17 @@ SLOT-TYPES: alist of (slot-name . type-spec) overrides for MOP-reported types."
            (has-initform (not (null (closer-mop:slot-definition-initfunction slot))))
            (required-p (and (not (null initargs))
                             (not has-initform)))
-           (ir-type (if list-of-element
-                        (make-ir-type-list
-                         :element-type (cl-type-to-ir-type list-of-element
-                                                           :schema-cache cache))
-                        (cl-type-to-ir-type type-spec :schema-cache cache)))
+           (ir-type (cond
+                      (map-of-value
+                       (make-ir-type-map
+                        :value-type (cl-type-to-ir-type map-of-value
+                                                        :schema-cache cache)))
+                      (list-of-element
+                       (make-ir-type-list
+                        :element-type (cl-type-to-ir-type list-of-element
+                                                          :schema-cache cache)))
+                      (t
+                       (cl-type-to-ir-type type-spec :schema-cache cache))))
            (nullable-p (ir-type-nullable-p ir-type)))
       (make-ir-field :name (lisp-name-to-json-name slot-name)
                      :type ir-type
@@ -86,6 +93,13 @@ Slot-types overrides take precedence (no :list-of in that path)."
   (when (and (not (assoc slot-name slot-types))
              (typep slot 'constructor-effective-slot-definition))
     (slot-definition-list-of slot)))
+
+(defun %slot-map-of-value (slot slot-name slot-types)
+  "Return the :map-of value type if present, nil otherwise.
+Slot-types overrides take precedence (no :map-of in that path)."
+  (when (and (not (assoc slot-name slot-types))
+             (typep slot 'constructor-effective-slot-definition))
+    (slot-definition-map-of slot)))
 
 (defun %slot-validate (slot)
   "Return the :validate function from SLOT if it is a constructor slot, nil otherwise."

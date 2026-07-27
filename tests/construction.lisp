@@ -417,3 +417,118 @@
     (let ((result (clos-alchemy::%safe-parse-number "42")))
       (ok (integerp result))
       (ok (= 42 result)))))
+
+;;; Map construction
+
+(defclass config-holder ()
+  ((name :initarg :name :accessor config-name :type string)
+   (settings :initarg :settings :accessor config-settings :initform nil)))
+
+(deftest map-construction-produces-hash-table
+  (let* ((schema (make-ir-schema
+                  :name "config"
+                  :class-name 'config-holder
+                  :fields (list
+                           (make-ir-field :name "name"
+                                          :type (make-ir-type-primitive :kind :string)
+                                          :required-p t
+                                          :slot-name 'name
+                                          :initarg :name)
+                           (make-ir-field :name "settings"
+                                          :type (make-ir-type-map
+                                                 :value-type (make-ir-type-primitive :kind :string))
+                                          :required-p t
+                                          :slot-name 'settings
+                                          :initarg :settings))))
+         (data (make-data "name" "prod"
+                          "settings" (make-data "key1" "val1" "key2" "val2")))
+         (instance (construct-from-data data schema)))
+    (ok (typep instance 'config-holder))
+    (ok (hash-table-p (config-settings instance)))
+    (ok (equal "val1" (gethash "key1" (config-settings instance))))
+    (ok (equal "val2" (gethash "key2" (config-settings instance))))))
+
+(deftest map-construction-coerces-integer-values
+  (let* ((schema (make-ir-schema
+                  :name "scores"
+                  :class-name 'config-holder
+                  :fields (list
+                           (make-ir-field :name "name"
+                                          :type (make-ir-type-primitive :kind :string)
+                                          :required-p t
+                                          :slot-name 'name
+                                          :initarg :name)
+                           (make-ir-field :name "settings"
+                                          :type (make-ir-type-map
+                                                 :value-type (make-ir-type-primitive :kind :integer))
+                                          :required-p t
+                                          :slot-name 'settings
+                                          :initarg :settings))))
+         (data (make-data "name" "scores"
+                          "settings" (make-data "math" 95.0 "science" 88)))
+         (instance (construct-from-data data schema)))
+    (ok (hash-table-p (config-settings instance)))
+    (ok (integerp (gethash "math" (config-settings instance))))
+    (ok (= 95 (gethash "math" (config-settings instance))))
+    (ok (= 88 (gethash "science" (config-settings instance))))))
+
+(deftest map-construction-empty-map
+  (let* ((schema (make-ir-schema
+                  :name "config"
+                  :class-name 'config-holder
+                  :fields (list
+                           (make-ir-field :name "name"
+                                          :type (make-ir-type-primitive :kind :string)
+                                          :required-p t
+                                          :slot-name 'name
+                                          :initarg :name)
+                           (make-ir-field :name "settings"
+                                          :type (make-ir-type-map
+                                                 :value-type (make-ir-type-primitive :kind :string))
+                                          :required-p t
+                                          :slot-name 'settings
+                                          :initarg :settings))))
+         (data (make-data "name" "empty"
+                          "settings" (make-data)))
+         (instance (construct-from-data data schema)))
+    (ok (hash-table-p (config-settings instance)))
+    (ok (zerop (hash-table-count (config-settings instance))))))
+
+(defclass point ()
+  ((x :initarg :x :accessor point-x :type integer)
+   (y :initarg :y :accessor point-y :type integer)))
+
+(deftest map-construction-with-object-values
+  (let* ((point-schema (make-ir-schema
+                        :name "point"
+                        :class-name 'point
+                        :fields (list
+                                 (make-ir-field :name "x"
+                                                :type (make-ir-type-primitive :kind :integer)
+                                                :required-p t
+                                                :slot-name 'x
+                                                :initarg :x)
+                                 (make-ir-field :name "y"
+                                                :type (make-ir-type-primitive :kind :integer)
+                                                :required-p t
+                                                :slot-name 'y
+                                                :initarg :y))))
+         (schema (make-ir-schema
+                  :name "labeled_points"
+                  :class-name nil
+                  :fields (list
+                           (make-ir-field :name "points"
+                                          :type (make-ir-type-map
+                                                 :value-type (make-ir-type-object :schema point-schema))
+                                          :required-p t
+                                          :slot-name 'points))))
+         (data (make-data "points"
+                          (make-data "origin" (make-data "x" 0 "y" 0)
+                                     "target" (make-data "x" 3 "y" 4))))
+         (result (construct-from-data data schema)))
+    (ok (hash-table-p result))
+    (let ((points (gethash "points" result)))
+      (ok (hash-table-p points))
+      (ok (typep (gethash "origin" points) 'point))
+      (ok (= 0 (point-x (gethash "origin" points))))
+      (ok (= 3 (point-x (gethash "target" points)))))))

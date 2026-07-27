@@ -16,6 +16,8 @@
    #:make-ir-type-nullable
    #:ir-type-date #:ir-type-date-p #:ir-type-date-format
    #:make-ir-type-date
+   #:ir-type-map #:ir-type-map-p #:ir-type-map-value-type
+   #:make-ir-type-map
 
    ;; Date type specifiers
    #:date #:date-time
@@ -59,6 +61,7 @@
    ;; Metaclass
    #:constructor-class
    #:slot-definition-list-of
+   #:slot-definition-map-of
    #:slot-definition-validate
 
    ;; Type mapping

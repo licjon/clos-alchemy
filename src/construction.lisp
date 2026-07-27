@@ -49,7 +49,8 @@ DATA is a hash table (from JSON parsing). Builds nested objects bottom-up."
         (ir-type-list (%coerce-list value ir-type))
         (ir-type-object (%coerce-object value ir-type))
         (ir-type-nullable (%coerce-nullable value ir-type))
-        (ir-type-date (%coerce-date value ir-type)))))
+        (ir-type-date (%coerce-date value ir-type))
+        (ir-type-map (%coerce-map value ir-type)))))
 
 (defun %coerce-primitive (value ir-type)
   (ecase (ir-type-primitive-kind ir-type)
@@ -160,3 +161,11 @@ are not portable across CL implementations."
   (if (eq value :null)
       nil
       (%coerce-value value (ir-type-nullable-inner-type ir-type))))
+
+(defun %coerce-map (value ir-type)
+  (let ((result (make-hash-table :test 'equal)))
+    (maphash (lambda (k v)
+               (setf (gethash k result)
+                     (%coerce-value v (ir-type-map-value-type ir-type))))
+             value)
+    result))

@@ -68,3 +68,61 @@
     (ok (equal '("a" "b") (item-tags obj)))
     (ok (equal '(1 2 3) (item-scores obj)))
     (ok (string= "test" (item-name obj)))))
+
+;;; ── :map-of slot option ────────────────────────────────────────────
+
+(defclass metadata-holder ()
+  ((tags :initarg :tags :type list :list-of string :accessor mh-tags)
+   (meta :initarg :meta :type hash-table :map-of string :accessor mh-meta)
+   (name :initarg :name :type string :accessor mh-name))
+  (:metaclass constructor-class))
+
+(deftest slot-map-of-accessor
+  (closer-mop:ensure-finalized (find-class 'metadata-holder))
+  (let* ((slots (closer-mop:class-slots (find-class 'metadata-holder)))
+         (meta-slot (find 'meta slots :key #'closer-mop:slot-definition-name))
+         (name-slot (find 'name slots :key #'closer-mop:slot-definition-name)))
+    (ok (slot-definition-map-of meta-slot))
+    (ok (eq 'string (slot-definition-map-of meta-slot)))
+    (ok (null (slot-definition-map-of name-slot)))))
+
+(deftest map-of-slot-option-produces-ir-type-map
+  (let* ((schema (class-to-schema 'metadata-holder))
+         (fields (ir-schema-fields schema))
+         (meta-f (find "meta" fields :key #'ir-field-name :test #'string=))
+         (name-f (find "name" fields :key #'ir-field-name :test #'string=)))
+    ;; meta: map-of string
+    (ok (ir-type-map-p (ir-field-type meta-f)))
+    (ok (ir-type-primitive-p (ir-type-map-value-type (ir-field-type meta-f))))
+    (ok (eq :string (ir-type-primitive-kind
+                     (ir-type-map-value-type (ir-field-type meta-f)))))
+    ;; name: plain string (no map-of)
+    (ok (ir-type-primitive-p (ir-field-type name-f)))
+    (ok (eq :string (ir-type-primitive-kind (ir-field-type name-f))))))
+
+(deftest slot-types-override-beats-map-of-option
+  (let* ((schema (class-to-schema 'metadata-holder
+                                  :slot-types '((meta . string))))
+         (fields (ir-schema-fields schema))
+         (meta-f (find "meta" fields :key #'ir-field-name :test #'string=)))
+    (ok (ir-type-primitive-p (ir-field-type meta-f)))
+    (ok (eq :string (ir-type-primitive-kind (ir-field-type meta-f))))))
+
+;;; :map-of with CLOS class value type
+
+(defclass point ()
+  ((x :initarg :x :type integer)
+   (y :initarg :y :type integer)))
+
+(defclass labeled-points ()
+  ((points :initarg :points :map-of point))
+  (:metaclass constructor-class))
+
+(deftest map-of-clos-class-produces-nested-object-values
+  (let* ((schema (class-to-schema 'labeled-points))
+         (fields (ir-schema-fields schema))
+         (points-f (find "points" fields :key #'ir-field-name :test #'string=)))
+    (ok (ir-type-map-p (ir-field-type points-f)))
+    (let ((val-type (ir-type-map-value-type (ir-field-type points-f))))
+      (ok (ir-type-object-p val-type))
+      (ok (ir-schema-p (ir-type-object-schema val-type))))))

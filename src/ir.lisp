@@ -23,6 +23,9 @@
 (defstruct (ir-type-date (:copier nil))
   (format :date :type (member :date :date-time)))
 
+(defstruct (ir-type-map (:copier nil))
+  (value-type nil))
+
 ;;; Field — one slot in the extraction target
 
 (defstruct (ir-field (:copier nil))

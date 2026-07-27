@@ -40,7 +40,8 @@ Enum fields always keep their allowed values visible."
     (ir-type-nullable (format nil "~A or null" (%type-label (ir-type-nullable-inner-type ir-type))))
     (ir-type-date (ecase (ir-type-date-format ir-type)
                     (:date "date")
-                    (:date-time "date-time")))))
+                    (:date-time "date-time")))
+    (ir-type-map (format nil "map of ~A" (%type-label (ir-type-map-value-type ir-type))))))
 
 (defun %type-hint (ir-type)
   (etypecase ir-type
@@ -62,4 +63,7 @@ Enum fields always keep their allowed values visible."
     (ir-type-date
      (ecase (ir-type-date-format ir-type)
        (:date "ISO 8601 date, e.g. 2025-01-15")
-       (:date-time "ISO 8601 date-time, e.g. 2025-01-15T14:30:00Z")))))
+       (:date-time "ISO 8601 date-time, e.g. 2025-01-15T14:30:00Z")))
+    (ir-type-map
+     (format nil "object with string keys and ~A values"
+             (%type-label (ir-type-map-value-type ir-type))))))

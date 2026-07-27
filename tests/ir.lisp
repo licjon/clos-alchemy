@@ -162,6 +162,16 @@
     (ok (ir-type-date-p dt))
     (ok (eq :date-time (ir-type-date-format dt)))))
 
+;;; Map type nodes
+
+(deftest map-type
+  (let* ((val-type (make-ir-type-primitive :kind :string))
+         (m (make-ir-type-map :value-type val-type)))
+    (ok (ir-type-map-p m))
+    (ok (ir-type-primitive-p (ir-type-map-value-type m)))
+    (ok (eq :string (ir-type-primitive-kind (ir-type-map-value-type m))))
+    (ok (not (ir-type-list-p m)))))
+
 ;;; Conditions
 
 (deftest condition-hierarchy

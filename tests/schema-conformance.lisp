@@ -432,3 +432,43 @@ must not be replaced by the initform"
       (ok (= 2 (length branches)))
       (ok (stringp (gethash "$ref" (first branches))))
       (ok (string= "null" (gethash "type" (second branches)))))))
+
+;;; ══════════════════════════════════════════════════════════════════
+;;;  PART F — map type conformance (#13)
+;;; ══════════════════════════════════════════════════════════════════
+
+(defclass map-holder ()
+  ((meta :type hash-table :initarg :meta :map-of string))
+  (:metaclass constructor-class))
+
+(defclass map-of-int ()
+  ((scores :type hash-table :initarg :scores :map-of integer))
+  (:metaclass constructor-class))
+
+(deftest emitted/map-class-conforms
+  (ok (conformant-p (schema-to-json-schema (class-to-schema 'map-holder)))))
+
+(deftest emitted/map-of-integer-class-conforms
+  (ok (conformant-p (schema-to-json-schema (class-to-schema 'map-of-int)))))
+
+(deftest emitted/map-additional-properties-is-schema
+  (testing "map slots emit additionalProperties as a type schema, not false"
+    (let* ((js (schema-to-json-schema (class-to-schema 'map-holder)))
+           (props (gethash "properties" js))
+           (meta-js (prop-get props "meta"))
+           (ap (gethash "additionalProperties" meta-js)))
+      (ok (hash-table-p ap))
+      (ok (string= "string" (gethash "type" ap))))))
+
+(deftest emitted/closed-object-still-has-false-additional-properties
+  (testing "non-map objects must still have additionalProperties: false"
+    (let ((js (schema-to-json-schema (class-to-schema 'optional-slot))))
+      (ok (eq 'yason:false (gethash "additionalProperties" js))))))
+
+(deftest emitted/map-has-empty-properties-and-required
+  (testing "map schemas must include empty properties and required for strict mode"
+    (let* ((js (schema-to-json-schema (class-to-schema 'map-holder)))
+           (meta-js (prop-get (gethash "properties" js) "meta"))
+           (json (with-output-to-string (s) (yason:encode meta-js s))))
+      (ok (search "\"properties\":{}" json))
+      (ok (search "\"required\":[]" json)))))
