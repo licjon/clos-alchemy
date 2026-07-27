@@ -170,6 +170,125 @@
         (ok (typep (second items) 'person))
         (ok (string= "Bob" (person-name (second items))))))))
 
+;;; Date construction — string to universal time
+
+(defclass event-holder ()
+  ((event-date :initarg :event-date :accessor event-holder-date :initform nil)
+   (timestamp :initarg :timestamp :accessor event-holder-timestamp :initform nil)))
+
+(deftest date-coercion-to-universal-time
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :class-name 'event-holder
+                  :fields (list
+                           (make-ir-field :name "event_date"
+                                          :type (make-ir-type-date :format :date)
+                                          :required-p t
+                                          :slot-name 'event-date
+                                          :initarg :event-date))))
+         (data (make-data "event_date" "2026-07-25"))
+         (instance (construct-from-data data schema)))
+    (ok (integerp (slot-value instance 'event-date)))
+    (ok (= (encode-universal-time 0 0 0 25 7 2026 0)
+           (slot-value instance 'event-date)))))
+
+(deftest date-time-coercion-with-z
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :class-name 'event-holder
+                  :fields (list
+                           (make-ir-field :name "timestamp"
+                                          :type (make-ir-type-date :format :date-time)
+                                          :required-p t
+                                          :slot-name 'timestamp
+                                          :initarg :timestamp))))
+         (data (make-data "timestamp" "2026-07-25T10:30:00Z"))
+         (instance (construct-from-data data schema)))
+    (ok (integerp (slot-value instance 'timestamp)))
+    (ok (= (encode-universal-time 0 30 10 25 7 2026 0)
+           (slot-value instance 'timestamp)))))
+
+(deftest date-time-with-positive-offset
+  (testing "+05:30 means UTC is 5h30m earlier"
+    (let* ((schema (make-ir-schema
+                    :name "event"
+                    :class-name 'event-holder
+                    :fields (list
+                             (make-ir-field :name "timestamp"
+                                            :type (make-ir-type-date :format :date-time)
+                                            :required-p t
+                                            :slot-name 'timestamp
+                                            :initarg :timestamp))))
+           (data (make-data "timestamp" "2026-07-25T10:30:00+05:30"))
+           (instance (construct-from-data data schema)))
+      (ok (= (encode-universal-time 0 0 5 25 7 2026 0)
+             (slot-value instance 'timestamp))))))
+
+(deftest date-time-with-negative-offset
+  (testing "-04:00 means UTC is 4h later"
+    (let* ((schema (make-ir-schema
+                    :name "event"
+                    :class-name 'event-holder
+                    :fields (list
+                             (make-ir-field :name "timestamp"
+                                            :type (make-ir-type-date :format :date-time)
+                                            :required-p t
+                                            :slot-name 'timestamp
+                                            :initarg :timestamp))))
+           (data (make-data "timestamp" "2026-07-25T10:30:00-04:00"))
+           (instance (construct-from-data data schema)))
+      (ok (= (encode-universal-time 0 30 14 25 7 2026 0)
+             (slot-value instance 'timestamp))))))
+
+(deftest date-time-offset-crosses-midnight
+  (testing "offset conversion that pushes UTC to previous day"
+    (let* ((schema (make-ir-schema
+                    :name "event"
+                    :class-name 'event-holder
+                    :fields (list
+                             (make-ir-field :name "timestamp"
+                                            :type (make-ir-type-date :format :date-time)
+                                            :required-p t
+                                            :slot-name 'timestamp
+                                            :initarg :timestamp))))
+           (data (make-data "timestamp" "2026-07-25T01:30:00+05:30"))
+           (instance (construct-from-data data schema)))
+      (ok (= (encode-universal-time 0 0 20 24 7 2026 0)
+             (slot-value instance 'timestamp))))))
+
+(deftest date-time-with-fractional-seconds
+  (testing "fractional seconds are accepted but truncated — universal time is integer"
+    (let* ((schema (make-ir-schema
+                    :name "event"
+                    :class-name 'event-holder
+                    :fields (list
+                             (make-ir-field :name "timestamp"
+                                            :type (make-ir-type-date :format :date-time)
+                                            :required-p t
+                                            :slot-name 'timestamp
+                                            :initarg :timestamp))))
+           (data (make-data "timestamp" "2026-07-25T10:30:45.123Z"))
+           (instance (construct-from-data data schema)))
+      (ok (integerp (slot-value instance 'timestamp)))
+      (ok (= (encode-universal-time 45 30 10 25 7 2026 0)
+             (slot-value instance 'timestamp))))))
+
+(deftest nullable-date-with-null
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :class-name 'event-holder
+                  :fields (list
+                           (make-ir-field :name "event_date"
+                                          :type (make-ir-type-nullable
+                                                 :inner-type (make-ir-type-date :format :date))
+                                          :required-p nil
+                                          :nullable-p t
+                                          :slot-name 'event-date
+                                          :initarg :event-date))))
+         (data (make-data "event_date" :null))
+         (instance (construct-from-data data schema)))
+    (ok (null (slot-value instance 'event-date)))))
+
 ;;; Integer coercion from float (JSON numbers)
 
 (deftest integer-coercion-from-float

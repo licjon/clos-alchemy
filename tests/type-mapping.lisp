@@ -132,6 +132,30 @@
       (ok (ir-type-nullable-p ir))
       (ok (eq :string (ir-type-primitive-kind (ir-type-nullable-inner-type ir)))))))
 
+;;; Date types
+
+(deftest date-type-mapping
+  (let ((ir (cl-type-to-ir-type 'date)))
+    (ok (ir-type-date-p ir))
+    (ok (eq :date (ir-type-date-format ir)))))
+
+(deftest date-time-type-mapping
+  (let ((ir (cl-type-to-ir-type 'date-time)))
+    (ok (ir-type-date-p ir))
+    (ok (eq :date-time (ir-type-date-format ir)))))
+
+(deftest or-null-date
+  (let ((ir (cl-type-to-ir-type '(or null date))))
+    (ok (ir-type-nullable-p ir))
+    (ok (ir-type-date-p (ir-type-nullable-inner-type ir)))
+    (ok (eq :date (ir-type-date-format (ir-type-nullable-inner-type ir))))))
+
+(deftest or-null-date-time
+  (let ((ir (cl-type-to-ir-type '(or null date-time))))
+    (ok (ir-type-nullable-p ir))
+    (ok (ir-type-date-p (ir-type-nullable-inner-type ir)))
+    (ok (eq :date-time (ir-type-date-format (ir-type-nullable-inner-type ir))))))
+
 ;;; Unsupported types signal schema-error
 
 (deftest unsupported-type-signals-error

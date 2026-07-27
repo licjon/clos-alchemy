@@ -111,6 +111,138 @@
       (ok valid-p)
       (ok (null errors)))))
 
+;;; Date validation
+
+(deftest valid-date-passes
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :fields (list
+                           (make-ir-field :name "date"
+                                          :type (make-ir-type-date :format :date)
+                                          :required-p t
+                                          :slot-name 'event-date))))
+         (data (make-data "date" "2026-07-25")))
+    (multiple-value-bind (valid-p errors)
+        (validate-data data schema)
+      (ok valid-p)
+      (ok (null errors)))))
+
+(deftest valid-date-leap-year
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :fields (list
+                           (make-ir-field :name "date"
+                                          :type (make-ir-type-date :format :date)
+                                          :required-p t
+                                          :slot-name 'event-date))))
+         (data (make-data "date" "2024-02-29")))
+    (multiple-value-bind (valid-p errors)
+        (validate-data data schema)
+      (ok valid-p)
+      (ok (null errors)))))
+
+(deftest invalid-date-bad-month
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :fields (list
+                           (make-ir-field :name "date"
+                                          :type (make-ir-type-date :format :date)
+                                          :required-p t
+                                          :slot-name 'event-date))))
+         (data (make-data "date" "2026-13-01")))
+    (multiple-value-bind (valid-p errors)
+        (validate-data data schema)
+      (ok (not valid-p))
+      (ok (= 1 (length errors))))))
+
+(deftest invalid-date-bad-day
+  (testing "2026-02-29 is invalid — 2026 is not a leap year"
+    (let* ((schema (make-ir-schema
+                    :name "event"
+                    :fields (list
+                             (make-ir-field :name "date"
+                                            :type (make-ir-type-date :format :date)
+                                            :required-p t
+                                            :slot-name 'event-date))))
+           (data (make-data "date" "2026-02-29")))
+      (multiple-value-bind (valid-p errors)
+          (validate-data data schema)
+        (ok (not valid-p))
+        (ok (= 1 (length errors)))))))
+
+(deftest invalid-date-malformed
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :fields (list
+                           (make-ir-field :name "date"
+                                          :type (make-ir-type-date :format :date)
+                                          :required-p t
+                                          :slot-name 'event-date))))
+         (data (make-data "date" "not-a-date")))
+    (multiple-value-bind (valid-p errors)
+        (validate-data data schema)
+      (ok (not valid-p))
+      (ok (= 1 (length errors))))))
+
+(deftest invalid-date-non-string
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :fields (list
+                           (make-ir-field :name "date"
+                                          :type (make-ir-type-date :format :date)
+                                          :required-p t
+                                          :slot-name 'event-date))))
+         (data (make-data "date" 42)))
+    (multiple-value-bind (valid-p errors)
+        (validate-data data schema)
+      (ok (not valid-p))
+      (ok (= 1 (length errors))))))
+
+;;; Date-time validation
+
+(deftest valid-date-time-with-z
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :fields (list
+                           (make-ir-field :name "ts"
+                                          :type (make-ir-type-date :format :date-time)
+                                          :required-p t
+                                          :slot-name 'ts))))
+         (data (make-data "ts" "2026-07-25T10:30:00Z")))
+    (multiple-value-bind (valid-p errors)
+        (validate-data data schema)
+      (ok valid-p)
+      (ok (null errors)))))
+
+(deftest valid-date-time-with-offset
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :fields (list
+                           (make-ir-field :name "ts"
+                                          :type (make-ir-type-date :format :date-time)
+                                          :required-p t
+                                          :slot-name 'ts))))
+         (data (make-data "ts" "2026-07-25T10:30:00+05:30")))
+    (multiple-value-bind (valid-p errors)
+        (validate-data data schema)
+      (ok valid-p)
+      (ok (null errors)))))
+
+(deftest invalid-date-time-missing-timezone
+  (testing "RFC 3339 date-time requires a timezone designator"
+    (let* ((schema (make-ir-schema
+                    :name "event"
+                    :fields (list
+                             (make-ir-field :name "ts"
+                                            :type (make-ir-type-date :format :date-time)
+                                            :required-p t
+                                            :slot-name 'ts))))
+           (data (make-data "ts" "2026-07-25T10:30:00")))
+      (multiple-value-bind (valid-p errors)
+          (validate-data data schema)
+        (ok (not valid-p))
+        (ok (= 1 (length errors)))))))
+
 ;;; Nested validation
 
 (deftest nested-validation-errors

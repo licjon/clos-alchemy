@@ -260,6 +260,55 @@
       (ok (null (ht-get js "$defs")))
       (ok (string= "object" (ht-get js "type"))))))
 
+;;; Date types — format annotation on string
+
+(deftest date-schema
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :fields (list
+                           (make-ir-field :name "event_date"
+                                          :type (make-ir-type-date :format :date)
+                                          :required-p t
+                                          :slot-name 'event-date))))
+         (js (schema-to-json-schema schema))
+         (props (ht-get js "properties"))
+         (date-js (ht-get props "event_date")))
+    (ok (string= "string" (ht-get date-js "type")))
+    (ok (string= "date" (ht-get date-js "format")))))
+
+(deftest date-time-schema
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :fields (list
+                           (make-ir-field :name "timestamp"
+                                          :type (make-ir-type-date :format :date-time)
+                                          :required-p t
+                                          :slot-name 'timestamp))))
+         (js (schema-to-json-schema schema))
+         (props (ht-get js "properties"))
+         (ts-js (ht-get props "timestamp")))
+    (ok (string= "string" (ht-get ts-js "type")))
+    (ok (string= "date-time" (ht-get ts-js "format")))))
+
+(deftest nullable-date-schema
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :fields (list
+                           (make-ir-field :name "event_date"
+                                          :type (make-ir-type-nullable
+                                                 :inner-type (make-ir-type-date :format :date))
+                                          :required-p nil
+                                          :nullable-p t
+                                          :slot-name 'event-date))))
+         (js (schema-to-json-schema schema))
+         (props (ht-get js "properties"))
+         (date-js (ht-get props "event_date")))
+    (ok (listp (ht-get date-js "anyOf")))
+    (ok (= 2 (length (ht-get date-js "anyOf"))))
+    (let ((inner (first (ht-get date-js "anyOf"))))
+      (ok (string= "string" (ht-get inner "type")))
+      (ok (string= "date" (ht-get inner "format"))))))
+
 ;;; ── Ordered map data structure (issue #8) ──
 
 (deftest ordered-map/encode-preserves-insertion-order

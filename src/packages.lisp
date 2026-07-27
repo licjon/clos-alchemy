@@ -14,6 +14,11 @@
    #:make-ir-type-object
    #:ir-type-nullable #:ir-type-nullable-p #:ir-type-nullable-inner-type
    #:make-ir-type-nullable
+   #:ir-type-date #:ir-type-date-p #:ir-type-date-format
+   #:make-ir-type-date
+
+   ;; Date type specifiers
+   #:date #:date-time
 
    ;; IR field and schema
    #:ir-field #:ir-field-p

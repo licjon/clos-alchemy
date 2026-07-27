@@ -123,6 +123,12 @@ SLOT-TYPES is unused here (consumed by class-to-schema before calling this)."
     ((eq spec 'boolean)
      (make-ir-type-primitive :kind :boolean))
 
+    ;; Date types
+    ((eq spec 'date)
+     (make-ir-type-date :format :date))
+    ((eq spec 'date-time)
+     (make-ir-type-date :format :date-time))
+
     ;; Plain list without element type
     ((member spec '(list cons sequence))
      (make-ir-type-list

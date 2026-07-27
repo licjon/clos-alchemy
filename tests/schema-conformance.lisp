@@ -264,6 +264,14 @@ rules in SCHEMA. An empty list means conformant. Pure — no I/O."
   ((tags :initarg :tags :list-of string))
   (:metaclass constructor-class))
 
+(defclass dated-event ()
+  ((title :type string :initarg :title)
+   (event-date :type date :initarg :event-date)))
+
+(defclass timestamped-event ()
+  ((title :type string :initarg :title)
+   (ts :type date-time :initarg :ts)))
+
 (defclass no-slots () ())
 
 (deftest emitted/optional-slot-class-conforms
@@ -280,6 +288,12 @@ rules in SCHEMA. An empty list means conformant. Pure — no I/O."
 
 (deftest emitted/list-of-class-conforms
   (ok (conformant-p (schema-to-json-schema (class-to-schema 'listy)))))
+
+(deftest emitted/date-class-conforms
+  (ok (conformant-p (schema-to-json-schema (class-to-schema 'dated-event)))))
+
+(deftest emitted/date-time-class-conforms
+  (ok (conformant-p (schema-to-json-schema (class-to-schema 'timestamped-event)))))
 
 (deftest emitted/slotless-class-conforms
   (testing "required must still be supplied, and must encode as [] not null"
