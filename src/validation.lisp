@@ -46,7 +46,8 @@ Returns (values valid-p error-list). Errors are collected, not signaled."
     (ir-type-object (%validate-object value ir-type field-name))
     (ir-type-nullable (%validate-nullable value ir-type field-name))
     (ir-type-date (%validate-date value ir-type field-name))
-    (ir-type-map (%validate-map value ir-type field-name))))
+    (ir-type-map (%validate-map value ir-type field-name))
+    (ir-type-union (%validate-union value ir-type field-name))))
 
 (defun %validate-primitive (value ir-type field-name)
   (let ((kind (ir-type-primitive-kind ir-type)))
@@ -96,6 +97,37 @@ Returns (values valid-p error-list). Errors are collected, not signaled."
   (if (eq value :null)
       nil
       (%validate-type value (ir-type-nullable-inner-type ir-type) field-name)))
+
+(defun %validate-union (value ir-type field-name)
+  (if (not (hash-table-p value))
+      (list (make-condition 'validation-error
+                            :field-name field-name
+                            :expected (format nil "object (one of: ~{~A~^, ~})"
+                                              (mapcar #'car (ir-type-union-branches ir-type)))
+                            :actual (format nil "~S" value)))
+      (let* ((disc-key (ir-type-union-discriminator ir-type))
+             (disc-present-p (nth-value 1 (gethash disc-key value)))
+             (disc-value (gethash disc-key value)))
+        (cond
+          ((not disc-present-p)
+           (list (make-condition 'validation-error
+                                 :field-name field-name
+                                 :expected (format nil "discriminator field ~S present" disc-key)
+                                 :actual "missing")))
+          (t
+           (let ((branch (assoc disc-value (ir-type-union-branches ir-type)
+                                :test #'string=)))
+             (if (not branch)
+                 (list (make-condition 'validation-error
+                                       :field-name field-name
+                                       :expected (format nil "~S to be one of: ~{~A~^, ~}"
+                                                         disc-key
+                                                         (mapcar #'car (ir-type-union-branches ir-type)))
+                                       :actual (format nil "~S" disc-value)))
+                 (multiple-value-bind (valid-p errors)
+                     (validate-data value (cdr branch))
+                   (declare (ignore valid-p))
+                   errors))))))))
 
 (defun %validate-map (value ir-type field-name)
   (if (not (hash-table-p value))
@@ -247,7 +279,9 @@ Returns nil on success, or a list of validation-error conditions."
     (ir-type-date (ecase (ir-type-date-format ir-type)
                     (:date "date")
                     (:date-time "date-time")))
-    (ir-type-map "map")))
+    (ir-type-map "map")
+    (ir-type-union (format nil "one of: ~{~A~^, ~}"
+                           (mapcar #'car (ir-type-union-branches ir-type))))))
 
 ;; Must return a list of strings (not conditions) — the extract loop wraps them.
 (defgeneric validate-instance (instance)

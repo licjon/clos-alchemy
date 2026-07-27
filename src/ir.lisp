@@ -26,6 +26,10 @@
 (defstruct (ir-type-map (:copier nil))
   (value-type nil))
 
+(defstruct (ir-type-union (:copier nil))
+  (discriminator "" :type string)
+  (branches nil :type list))
+
 ;;; Field — one slot in the extraction target
 
 (defstruct (ir-field (:copier nil))

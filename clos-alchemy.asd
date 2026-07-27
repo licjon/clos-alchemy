@@ -39,7 +39,8 @@
                  (:file "security")
                  (:file "unsupported-types")
                  (:file "schema-conformance")
-                 (:file "custom-validation"))))
+                 (:file "custom-validation")
+                 (:file "union"))))
   :perform (test-op (op c) (symbol-call :rove :run c)))
 
 ;;; Gated: needs llama.cpp built as a shared library, so it stays out of the
@@ -59,4 +60,5 @@
                 :components
                 ((:file "extract-llama")
                  (:file "classify-llama")
-                 (:file "validate-llama")))))
+                 (:file "validate-llama")
+                 (:file "union-llama")))))
