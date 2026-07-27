@@ -90,11 +90,12 @@ examples.
 
 * Systems
 
-| System                    | Description                              | Dependencies                        |
-|---------------------------+------------------------------------------+-------------------------------------|
-| =clos-alchemy=          | Core library — introspection, IR, schema | =closer-mop=, =yason=, =cl-llm-backend= |
-| =clos-alchemy/tests=    | Core test suite                          | =rove=                                |
-| =clos-alchemy/examples= | Example programs                         | =clos-alchemy=, =cl-llm-backend/llama= |
+| System                      | Description                                                         | Dependencies                                |
+|-----------------------------+---------------------------------------------------------------------+---------------------------------------------|
+| =clos-alchemy=            | Core library — introspection, IR, schema                            | =closer-mop=, =yason=, =cl-llm-backend=          |
+| =clos-alchemy/tests=      | Core test suite                                                     | =rove=                                        |
+| =clos-alchemy/tests/gbnf= | GBNF conformance tests (asserts schemas compile to GBNF grammars)   | =rove=, =cl-llama-cpp-extras/json-schema=      |
+| =clos-alchemy/examples=   | Example programs                                                    | =clos-alchemy=, =cl-llm-backend/llama=         |
 
 * How it works
 
@@ -107,7 +108,7 @@ examples.
       ▼
   IR schema (ir-schema, ir-field, ir-type-*)
       │
-      ├──▶ JSON Schema (hash table)
+      ├──▶ JSON Schema (hash table, with $defs/$ref for cycles)
       │        │
       │        ▼
       │    GBNF grammar (via cl-llama-cpp-extras/json-schema)
@@ -118,10 +119,16 @@ examples.
       │        ▼
       │    JSON response
       │
-      ├──▶ Validation (validate-data)
+      ├──▶ Structural validation (validate-data)
       │
       ▼
   CLOS instance (construct-from-data)
+      │
+      ▼
+  Semantic validation (:validate, validate-instance)
+      │
+      ▼
+  Result (or retry with error feedback)
 #+end_example
 
 The IR (intermediate representation) normalises CLOS MOP metadata into a
@@ -130,9 +137,15 @@ backend-agnostic schema. =ir-schema= describes the extraction target,
 types. Backends only see the IR — they never touch MOP internals.
 
 Grammar-constrained generation eliminates JSON parsing failures. Validation
-then checks semantic constraints (field types, required fields); failed
-attempts retry automatically (default 3 retries). Retries are triggered on
-schema validation failure, not grammar failure.
+then checks structural constraints (field types, required fields) and semantic
+constraints (per-slot =:validate= predicates, =validate-instance= methods);
+failed attempts retry automatically (default 3 retries) with error messages
+fed back to the model as corrective context. Parse failures are also
+recoverable — they accumulate errors and trigger corrective retries rather
+than aborting.
+
+Mutually-referential classes are handled via =$defs= / =$ref= in the emitted
+JSON Schema, so cyclic class graphs work without stack overflow.
 
 * Supported types
 
@@ -150,7 +163,11 @@ Type specifiers on CLOS slots map to JSON Schema types:
 | =:list-of <type>=                    | ={"type":"array","items":{...}}=    | =ir-type-list=      |
 | =(vector <type>)=, =(array <type>)=    | ={"type":"array","items":{...}}=    | =ir-type-list=      |
 | =(or null <type>)=                   | ={"anyOf":[{...},{"type":"null"}]}= | =ir-type-nullable=  |
+| =date=                               | ={"type":"string","format":"date"}=  | =ir-type-date=      |
+| =date-time=                          | ={"type":"string","format":"date-time"}= | =ir-type-date= |
+| =:map-of <type>=                     | ={"additionalProperties":{...}}=    | =ir-type-map=       |
 | A CLOS class name                  | Nested object                     | =ir-type-object=    |
+| Discriminated union               | ={"anyOf":[...]}= with enum disc. | =ir-type-union=     |
 
 A plain =list= slot defaults to string elements, and =(vector <type>)= gives
 typed elements on any class — neither needs a metaclass. Standard CL has no
@@ -167,6 +184,58 @@ classes with =(:metaclass constructor-class)=:
 Slots typed =(vector <type>)= or =(array <type>)= receive a CL vector; =list=
 and =:list-of= slots receive a list. All elements must be the same type;
 mixed-type arrays (e.g. =["alice", 32, true]=) are not supported.
+
+** Dates
+
+The exported symbols =clos-alchemy:date= and =clos-alchemy:date-time= map to
+JSON Schema =format: "date"= and =format: "date-time"= respectively. Values
+are validated as ISO 8601 with calendar-aware day checks and constructed to
+CL universal time:
+
+#+begin_src lisp
+(defclass event ()
+  ((title :initarg :title :type string)
+   (when  :initarg :when  :type date)))
+#+end_src
+
+** Free-form maps (=:map-of=)
+
+When the set of keys is unknown at schema-definition time, use the =:map-of=
+slot option (requires =constructor-class=). The JSON Schema emits
+=additionalProperties= with a value-type schema; the CL representation is a
+=hash-table= with =equal= test:
+
+#+begin_src lisp
+(defclass scores ()
+  ((per-category :initarg :per-category :type hash-table
+                 :map-of integer))
+  (:metaclass clos-alchemy:constructor-class))
+#+end_src
+
+** Discriminated unions
+
+When the model must choose between structurally different result shapes, use
+=compile-union-extractor= / =extract-union=. Each class in the union has a
+shared discriminator slot typed as a single-value =(member :tag)= enum:
+
+#+begin_src lisp
+(defclass success ()
+  ((kind  :initarg :kind  :type (member :success))
+   (value :initarg :value :type integer)))
+
+(defclass failure ()
+  ((kind   :initarg :kind   :type (member :failure))
+   (reason :initarg :reason :type string)))
+
+(let ((c (compile-union-extractor '(success failure)
+                                   :discriminator 'kind)))
+  (extract-union backend c document))
+#+end_src
+
+The returned instance is whichever CLOS class the model selected. Unions
+compose with list, nullable, map, and nested-object types.
+
+** Unsupported types
 
 Any other type specifier signals a =schema-error= — named types with no JSON
 analogue (=hash-table=, =symbol=, =keyword=, =character=, =pathname=) and
@@ -189,6 +258,40 @@ Descriptions materially improve extraction quality on ambiguous fields — prefe
 them over relying on slot names alone. Enum fields keep their allowed values
 visible in the prompt alongside the description.
 
+* Custom validation
+
+Beyond the structural checks that schema validation provides, you can add
+semantic constraints that feed errors back into the retry loop.
+
+** Per-slot predicates (=:validate=)
+
+Attach a predicate to any slot via the =:validate= option (requires
+=constructor-class=). The function receives the slot's value and returns =t=
+on success or an error-message string on failure:
+
+#+begin_src lisp
+(defclass booking ()
+  ((num-guests :initarg :num-guests :type integer
+               :validate (lambda (v) (if (plusp v) t "must be positive"))))
+  (:metaclass clos-alchemy:constructor-class))
+#+end_src
+
+** Cross-field validation (=validate-instance=)
+
+For constraints that span multiple slots, specialize the =validate-instance=
+generic function on your class. Return =nil= if valid, or a list of
+error-message strings:
+
+#+begin_src lisp
+(defmethod validate-instance ((b booking))
+  (when (<= (booking-check-out b) (booking-check-in b))
+    (list "check-out must be after check-in")))
+#+end_src
+
+Both per-slot and instance validation errors are fed back to the model as
+corrective context on the next retry, so the LLM sees /what/ was wrong and can
+self-correct.
+
 * API
 
 ** Core
@@ -196,6 +299,9 @@ visible in the prompt alongside the description.
 - =compile-extractor (class &key mode slot-list slot-types user-prompt)= — pre-compile the extraction pipeline. Returns a reusable =extraction-compilation= with a cached IR schema and system prompt.
 - =extract (backend compilation-or-class document &key max-retries temperature max-tokens user-prompt)= — extract a single instance.
 - =extract-list (backend compilation-or-class document &key ...)= — extract multiple instances; the result's instance slot is a list (possibly empty).
+- =compile-union-extractor (classes &key discriminator user-prompt)= — pre-compile a discriminated union extraction pipeline.
+- =extract-union (backend compilation-or-classes document &key discriminator max-retries temperature max-tokens user-prompt)= — extract one of N union shapes.
+- =validate-instance (instance)= — generic function for cross-field validation. Default returns =nil=; specialize on your class.
 - =class-to-schema (class &key mode slot-list slot-types)= — introspect a class into an IR schema.
 - =schema-to-json-schema (schema)= — convert an IR schema to a JSON Schema hash table.
 
@@ -241,8 +347,8 @@ matching the schema, eliminating post-hoc parsing failures.
 - *Ordinary classes.* Define a CLOS class with types on its slots and the
   library introspects it. No metaclass needed for the common cases — plain
   =list= slots default to string elements and =(vector <type>)= works
-  anywhere. =constructor-class= is opt-in, only for =:list-of= (lists of
-  non-string elements).
+  anywhere. =constructor-class= is opt-in, only for custom slot options
+  (=:list-of=, =:map-of=, =:validate=).
 
 * Examples
 
@@ -303,6 +409,45 @@ Example output:
   Reason:    "Charged twice for subscription, third occurrence"
   Retries:   0
 #+end_example
+
+** Semantic validation (=validate-llama=)
+
+Per-slot =:validate= predicates and a =validate-instance= method enforce
+semantic constraints (positive guest counts, date ordering, nights consistency)
+on hotel bookings. Adversarial inputs provoke extraction errors that the
+validator catches and feeds back to the model for self-correction. Uses =date=
+typed slots.
+
+#+begin_src lisp
+(setf clos-alchemy/examples/validate-llama::*model-path*
+      "/path/to/model.gguf")
+
+(clos-alchemy/examples/validate-llama:run)
+#+end_src
+
+** Discriminated union (=union-llama=)
+
+Product review analyzer: the model decides whether a review is actionable
+(with per-category scores in a =:map-of= slot) or not actionable (with a
+reason). A discriminated union constrains the model to pick exactly one shape.
+
+#+begin_src lisp
+(setf clos-alchemy/examples/union-llama::*model-path*
+      "/path/to/model.gguf")
+
+(clos-alchemy/examples/union-llama:run)
+#+end_src
+
+* Error handling
+
+When all retries are exhausted, =max-retries-error= is signalled with
+diagnostic context for debugging or salvage:
+
+- =max-retries-error-raw-response= — the last raw LLM output string
+- =max-retries-error-raw-data= — the last parsed data (or =nil= on parse failure)
+- =max-retries-error-usage= — cumulative token usage across all attempts (=:prompt-tokens=, =:completion-tokens=)
+- =max-retries-error-attempts= — list of per-attempt plists (=:raw-response=, =:raw-data=, =:errors=)
+- =max-retries-error-retries= and =max-retries-error-errors= — unchanged from before
 
 * Running tests
 
