@@ -41,7 +41,11 @@ Enum fields always keep their allowed values visible."
     (ir-type-date (ecase (ir-type-date-format ir-type)
                     (:date "date")
                     (:date-time "date-time")))
-    (ir-type-map (format nil "map of ~A" (%type-label (ir-type-map-value-type ir-type))))))
+    (ir-type-map (format nil "map of ~A" (%type-label (ir-type-map-value-type ir-type))))
+    (ir-type-union
+     (format nil "one of: ~{~A~^, ~}"
+             (mapcar (lambda (b) (ir-schema-name (cdr b)))
+                     (ir-type-union-branches ir-type))))))
 
 (defun %type-hint (ir-type)
   (etypecase ir-type
@@ -66,4 +70,13 @@ Enum fields always keep their allowed values visible."
        (:date-time "ISO 8601 date-time, e.g. 2025-01-15T14:30:00Z")))
     (ir-type-map
      (format nil "object with string keys and ~A values"
-             (%type-label (ir-type-map-value-type ir-type))))))
+             (%type-label (ir-type-map-value-type ir-type))))
+    (ir-type-union
+     (format nil "one of the following, selected by ~S: ~{~A~^; ~}"
+             (ir-type-union-discriminator ir-type)
+             (mapcar (lambda (branch)
+                       (format nil "~A (fields: ~{~A~^, ~})"
+                               (ir-schema-name (cdr branch))
+                               (mapcar #'ir-field-name
+                                       (ir-schema-fields (cdr branch)))))
+                     (ir-type-union-branches ir-type))))))

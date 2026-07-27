@@ -182,3 +182,74 @@ Returns nil if valid, or a list of validation-error conditions."
     (format s "Raw response (first 200 chars): ~A~%"
             (subseq raw-response 0 (min 200 (length raw-response))))
     (format s "Please respond with ONLY valid JSON matching the schema. No markdown fences, no explanatory text.")))
+
+(defun compile-union-extractor (classes &key discriminator user-prompt)
+  "Pre-compile an extraction pipeline for a discriminated union of CLASSES.
+CLASSES: list of class designator symbols, each with a single-value (member ...)
+slot named DISCRIMINATOR.
+USER-PROMPT: optional domain context appended to system prompt."
+  (let* ((cache (make-hash-table))
+         (disc-json-name (lisp-name-to-json-name discriminator))
+         (branches
+           (mapcar (lambda (class)
+                     (let* ((schema (class-to-schema class :schema-cache cache))
+                            (disc-field (find disc-json-name (ir-schema-fields schema)
+                                             :key #'ir-field-name :test #'string=)))
+                       (unless disc-field
+                         (error 'schema-error
+                                :class-name class
+                                :reason (format nil "discriminator slot ~A not found"
+                                                discriminator)))
+                       (let ((disc-type (ir-field-type disc-field)))
+                         (unless (ir-type-enum-p disc-type)
+                           (error 'schema-error
+                                  :class-name class
+                                  :reason (format nil "discriminator slot ~A must have a single-value (member ...) type"
+                                                  discriminator)))
+                         (let ((values (ir-type-enum-values disc-type)))
+                           (unless (= 1 (length values))
+                             (error 'schema-error
+                                    :class-name class
+                                    :reason (format nil "discriminator slot ~A must have exactly one enum value, got ~D"
+                                                    discriminator (length values))))
+                           (cons (first values) schema)))))
+                   classes))
+         (seen (make-hash-table :test 'equal)))
+    (dolist (branch branches)
+      (let ((disc-val (car branch)))
+        (when (gethash disc-val seen)
+          (error 'schema-error
+                 :class-name (ir-schema-class-name (cdr branch))
+                 :reason (format nil "duplicate discriminator value ~S" disc-val)))
+        (setf (gethash disc-val seen) t)))
+    (let* ((union-type (make-ir-type-union
+                        :discriminator disc-json-name
+                        :branches branches))
+           (wrapper-schema (make-ir-schema
+                            :name "union_result"
+                            :class-name nil
+                            :fields (list
+                                     (make-ir-field
+                                      :name "result"
+                                      :type union-type
+                                      :required-p t
+                                      :slot-name 'result))))
+           (prompt (generate-system-prompt wrapper-schema :user-prompt user-prompt)))
+      (make-extraction-compilation :schema wrapper-schema :prompt prompt))))
+
+(defun extract-union (backend compilation-or-classes document
+                      &key discriminator (max-retries 3) (temperature 0.0)
+                           max-tokens user-prompt)
+  "Extract a discriminated union from DOCUMENT.
+COMPILATION-OR-CLASSES: an extraction-compilation from compile-union-extractor,
+or a list of class symbols (requires :discriminator).
+Returns an extraction-result whose instance is one of the union's CLOS classes."
+  (let ((compilation (etypecase compilation-or-classes
+                       (extraction-compilation compilation-or-classes)
+                       (list (compile-union-extractor compilation-or-classes
+                                                      :discriminator discriminator)))))
+    (let ((result (%extract-with-retry backend compilation document
+                                       max-retries temperature max-tokens user-prompt)))
+      (setf (extraction-result-instance result)
+            (gethash "result" (extraction-result-instance result)))
+      result)))

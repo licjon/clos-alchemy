@@ -18,6 +18,9 @@
    #:make-ir-type-date
    #:ir-type-map #:ir-type-map-p #:ir-type-map-value-type
    #:make-ir-type-map
+   #:ir-type-union #:ir-type-union-p #:ir-type-union-discriminator
+   #:ir-type-union-branches
+   #:make-ir-type-union
 
    ;; Date type specifiers
    #:date #:date-time
@@ -94,4 +97,6 @@
    ;; Top-level API
    #:compile-extractor
    #:extract
-   #:extract-list))
+   #:extract-list
+   #:compile-union-extractor
+   #:extract-union))
