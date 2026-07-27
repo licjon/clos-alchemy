@@ -65,6 +65,22 @@ the chain-of-thought ordering documented at README:300"
                     (schema-to-json-schema (class-to-schema 'optional-slot)))))
       (ok (< (search "reason-kv" grammar) (search "nick-kv" grammar))))))
 
+;;; Date types (#12)
+
+(defclass dated-event ()
+  ((title :type string :initarg :title)
+   (event-date :type date :initarg :event-date)))
+
+(deftest gbnf/date-class
+  (ok (compiles-to-grammar-p 'dated-event)))
+
+(defclass timestamped-event ()
+  ((title :type string :initarg :title)
+   (ts :type date-time :initarg :ts)))
+
+(deftest gbnf/date-time-class
+  (ok (compiles-to-grammar-p 'timestamped-event)))
+
 ;;; Cyclic schemas (#1)
 
 (defclass tree-node ()

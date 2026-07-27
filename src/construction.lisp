@@ -48,7 +48,8 @@ DATA is a hash table (from JSON parsing). Builds nested objects bottom-up."
         (ir-type-enum (%coerce-enum value))
         (ir-type-list (%coerce-list value ir-type))
         (ir-type-object (%coerce-object value ir-type))
-        (ir-type-nullable (%coerce-nullable value ir-type)))))
+        (ir-type-nullable (%coerce-nullable value ir-type))
+        (ir-type-date (%coerce-date value ir-type)))))
 
 (defun %coerce-primitive (value ir-type)
   (ecase (ir-type-primitive-kind ir-type)
@@ -91,6 +92,54 @@ DATA is a hash table (from JSON parsing). Builds nested objects bottom-up."
                       :reason (format nil "invalid number: ~S" string)))))
         (t (error 'generation-error :backend :coerce
                   :reason (format nil "invalid number: ~S" string)))))))
+
+(defun %coerce-date (value ir-type)
+  "Coerce a validated date or date-time string to CL universal time."
+  (ecase (ir-type-date-format ir-type)
+    (:date (%coerce-date-string value))
+    (:date-time (%coerce-date-time-string value))))
+
+(defun %coerce-date-string (value)
+  (let ((year (parse-integer value :start 0 :end 4))
+        (month (parse-integer value :start 5 :end 7))
+        (day (parse-integer value :start 8 :end 10)))
+    (encode-universal-time 0 0 0 day month year 0)))
+
+(defun %coerce-date-time-string (value)
+  (let* ((year (parse-integer value :start 0 :end 4))
+         (month (parse-integer value :start 5 :end 7))
+         (day (parse-integer value :start 8 :end 10))
+         (hour (parse-integer value :start 11 :end 13))
+         (minute (parse-integer value :start 14 :end 16))
+         (second (parse-integer value :start 17 :end 19))
+         (rest-start 19)
+         (len (length value)))
+    ;; skip fractional seconds
+    (when (and (< rest-start len) (char= (char value rest-start) #\.))
+      (incf rest-start)
+      (loop while (and (< rest-start len) (digit-char-p (char value rest-start)))
+            do (incf rest-start)))
+    ;; parse timezone and convert to UTC seconds offset
+    (let ((offset-seconds (%parse-tz-offset-seconds value rest-start len)))
+      (%encode-utc-time second minute hour day month year offset-seconds))))
+
+(defun %parse-tz-offset-seconds (value start end)
+  "Parse timezone suffix and return offset from UTC in seconds.
++05:30 → +19800, -04:00 → -14400, Z → 0."
+  (if (and (= (- end start) 1) (char= (char value start) #\Z))
+      0
+      (let* ((sign (if (char= (char value start) #\+) 1 -1))
+             (tz-hour (parse-integer value :start (+ start 1) :end (+ start 3)))
+             (tz-min (parse-integer value :start (+ start 4) :end (+ start 6))))
+        (* sign (+ (* tz-hour 3600) (* tz-min 60))))))
+
+(defun %encode-utc-time (second minute hour day month year offset-seconds)
+  "Encode a local time with OFFSET-SECONDS into UTC universal time.
+Avoids encode-universal-time's timezone parameter — fractional hours
+are not portable across CL implementations."
+  (let* ((local-ut (encode-universal-time second minute hour day month year 0))
+         (utc-ut (- local-ut offset-seconds)))
+    utc-ut))
 
 (defun %coerce-enum (value)
   "Convert JSON enum string to a keyword."

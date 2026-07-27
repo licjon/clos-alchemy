@@ -149,6 +149,21 @@
 
 ;;; Conditions
 
+;;; Date type nodes
+
+(deftest date-type
+  (let ((d (make-ir-type-date :format :date)))
+    (ok (ir-type-date-p d))
+    (ok (eq :date (ir-type-date-format d)))
+    (ok (not (ir-type-primitive-p d)))))
+
+(deftest date-time-type
+  (let ((dt (make-ir-type-date :format :date-time)))
+    (ok (ir-type-date-p dt))
+    (ok (eq :date-time (ir-type-date-format dt)))))
+
+;;; Conditions
+
 (deftest condition-hierarchy
   (ok (subtypep 'schema-error 'extraction-error))
   (ok (subtypep 'validation-error 'extraction-error))

@@ -66,6 +66,34 @@
          (prompt (generate-system-prompt schema)))
     (ok (search "Full legal name" prompt))))
 
+;;; Date types in prompts
+
+(deftest prompt-contains-date-type-info
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :fields (list
+                           (make-ir-field :name "event_date"
+                                          :type (make-ir-type-date :format :date)
+                                          :required-p t
+                                          :slot-name 'event-date))))
+         (prompt (generate-system-prompt schema)))
+    (ok (search "date" prompt))
+    (ok (search "ISO 8601" prompt))))
+
+(deftest prompt-contains-date-time-type-info
+  (let* ((schema (make-ir-schema
+                  :name "event"
+                  :fields (list
+                           (make-ir-field :name "timestamp"
+                                          :type (make-ir-type-date :format :date-time)
+                                          :required-p t
+                                          :slot-name 'timestamp))))
+         (prompt (generate-system-prompt schema)))
+    (ok (search "date-time" prompt))
+    (ok (search "ISO 8601" prompt))))
+
+;;; Enum descriptions
+
 (deftest prompt-keeps-enum-values-alongside-description
   (let* ((schema (make-ir-schema
                   :name "ticket"

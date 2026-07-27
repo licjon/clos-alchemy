@@ -41,46 +41,43 @@
                  :validate (lambda (v) (if (>= v 1) t "num_nights must be at least 1"))
                  :documentation "Duration of stay in nights (must be >= 1)")
    (check-in     :initarg :check-in     :accessor booking-check-in
-                 :type string
-                 :documentation "Check-in date in YYYY-MM-DD format")
+                 :type date
+                 :documentation "Check-in date")
    (check-out    :initarg :check-out    :accessor booking-check-out
-                 :type string
-                 :documentation "Check-out date in YYYY-MM-DD format")
+                 :type date
+                 :documentation "Check-out date")
    (room-type    :initarg :room-type    :accessor booking-room-type
                  :type (member :single :double :suite)
                  :documentation "Type of room requested"))
   (:metaclass constructor-class)
   (:documentation "A hotel booking with semantic constraints."))
 
-(defun parse-date (date-string)
-  "Parse YYYY-MM-DD to a universal time for arithmetic."
-  (encode-universal-time
-   0 0 0
-   (parse-integer date-string :start 8 :end 10)
-   (parse-integer date-string :start 5 :end 7)
-   (parse-integer date-string :start 0 :end 4)
-   0))
+(defun format-date (ut)
+  "Format a universal time as YYYY-MM-DD."
+  (multiple-value-bind (s min h day month year) (decode-universal-time ut 0)
+    (declare (ignore s min h))
+    (format nil "~4,'0D-~2,'0D-~2,'0D" year month day)))
 
 (defun date-diff-nights (start end)
-  "Compute nights between two YYYY-MM-DD date strings."
-  (round (- (parse-date end) (parse-date start)) 86400))
+  "Compute nights between two universal times."
+  (round (- end start) 86400))
 
 (defmethod validate-instance ((b hotel-booking))
   "Cross-field checks: date ordering and nights consistency."
-  (let ((errors '()))
-    (when (string<= (booking-check-out b) (booking-check-in b))
+  (let ((errors '())
+        (ci (booking-check-in b))
+        (co (booking-check-out b)))
+    (when (<= co ci)
       (push (format nil "Dates are reversed. Swap them: set check_in to ~A and check_out to ~A"
-                    (booking-check-out b) (booking-check-in b))
+                    (format-date co) (format-date ci))
             errors))
-    (when (and (string> (booking-check-out b) (booking-check-in b))
+    (when (and (> co ci)
                (/= (booking-num-nights b)
-                    (date-diff-nights (booking-check-in b)
-                                      (booking-check-out b))))
+                    (date-diff-nights ci co)))
       (push (format nil "num_nights (~D) does not match date span (~D nights: ~A to ~A)"
                     (booking-num-nights b)
-                    (date-diff-nights (booking-check-in b)
-                                      (booking-check-out b))
-                    (booking-check-in b) (booking-check-out b))
+                    (date-diff-nights ci co)
+                    (format-date ci) (format-date co))
             errors))
     errors))
 
@@ -122,8 +119,8 @@ Dates: 2025-02-10 to 2025-02-14")))
       (format t "  guest-name: ~S~%" (booking-guest-name b))
       (format t "  num-guests: ~D~%" (booking-num-guests b))
       (format t "  num-nights: ~D~%" (booking-num-nights b))
-      (format t "  check-in:   ~A~%" (booking-check-in b))
-      (format t "  check-out:  ~A~%" (booking-check-out b))
+      (format t "  check-in:   ~A~%" (format-date (booking-check-in b)))
+      (format t "  check-out:  ~A~%" (format-date (booking-check-out b)))
       (format t "  room-type:  ~A~%" (booking-room-type b))
       (format t "  valid:      ~A~2%" (null (validate-instance b))))))
 

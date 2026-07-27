@@ -95,7 +95,8 @@ Cyclic schema references are expressed via $defs/$ref."
     (ir-type-enum (%enum-to-json-schema ir-type))
     (ir-type-list (%list-to-json-schema ir-type in-progress defs))
     (ir-type-object (%object-to-json-schema ir-type in-progress defs))
-    (ir-type-nullable (%nullable-to-json-schema ir-type in-progress defs))))
+    (ir-type-nullable (%nullable-to-json-schema ir-type in-progress defs))
+    (ir-type-date (%date-to-json-schema ir-type))))
 
 (defun %primitive-to-json-schema (ir-type)
   (let ((ht (make-hash-table :test 'equal)))
@@ -123,6 +124,15 @@ Cyclic schema references are expressed via $defs/$ref."
 
 (defun %object-to-json-schema (ir-type in-progress defs)
   (%ir-schema-to-json-schema (ir-type-object-schema ir-type) in-progress defs))
+
+(defun %date-to-json-schema (ir-type)
+  (let ((ht (make-hash-table :test 'equal)))
+    (setf (gethash "type" ht) "string")
+    (setf (gethash "format" ht)
+          (ecase (ir-type-date-format ir-type)
+            (:date "date")
+            (:date-time "date-time")))
+    ht))
 
 (defun %nullable-to-json-schema (ir-type in-progress defs)
   (let ((ht (make-hash-table :test 'equal)))

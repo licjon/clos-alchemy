@@ -37,7 +37,10 @@ Enum fields always keep their allowed values visible."
     (ir-type-enum "enum")
     (ir-type-list (format nil "array of ~A" (%type-label (ir-type-list-element-type ir-type))))
     (ir-type-object "object")
-    (ir-type-nullable (format nil "~A or null" (%type-label (ir-type-nullable-inner-type ir-type))))))
+    (ir-type-nullable (format nil "~A or null" (%type-label (ir-type-nullable-inner-type ir-type))))
+    (ir-type-date (ecase (ir-type-date-format ir-type)
+                    (:date "date")
+                    (:date-time "date-time")))))
 
 (defun %type-hint (ir-type)
   (etypecase ir-type
@@ -55,4 +58,8 @@ Enum fields always keep their allowed values visible."
      (format nil "nested object with fields: ~{~A~^, ~}"
              (mapcar #'ir-field-name (ir-schema-fields (ir-type-object-schema ir-type)))))
     (ir-type-nullable
-     (format nil "~A, or null if unknown" (%type-hint (ir-type-nullable-inner-type ir-type))))))
+     (format nil "~A, or null if unknown" (%type-hint (ir-type-nullable-inner-type ir-type))))
+    (ir-type-date
+     (ecase (ir-type-date-format ir-type)
+       (:date "ISO 8601 date, e.g. 2025-01-15")
+       (:date-time "ISO 8601 date-time, e.g. 2025-01-15T14:30:00Z")))))
