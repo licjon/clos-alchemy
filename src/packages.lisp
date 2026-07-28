@@ -108,5 +108,6 @@
    #:compile-extractor
    #:extract
    #:extract-list
+   #:extract-value
    #:compile-union-extractor
    #:extract-union))

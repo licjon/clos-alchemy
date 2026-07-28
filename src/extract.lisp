@@ -54,6 +54,30 @@ Returns an extraction-result whose instance slot is a list."
             (gethash "items" (extraction-result-instance result)))
       result)))
 
+(defun extract-value (backend type-spec document
+                      &key (max-retries 3) (temperature 0.0) max-tokens user-prompt)
+  "Extract a single value of TYPE-SPEC from DOCUMENT.
+TYPE-SPEC is a CL type specifier (integer, string, boolean, (member ...), (vector string), etc.).
+Returns an extraction-result whose instance slot is the unwrapped value."
+  (let* ((ir-type (cl-type-to-ir-type type-spec))
+         (value-schema (make-ir-schema
+                        :name "value_wrapper"
+                        :class-name nil
+                        :fields (list
+                                 (make-ir-field
+                                  :name "value"
+                                  :type ir-type
+                                  :required-p t
+                                  :slot-name 'value))))
+         (compilation (make-extraction-compilation
+                       :schema value-schema
+                       :prompt (generate-system-prompt value-schema))))
+    (let ((result (%extract-with-retry backend compilation document
+                                       max-retries temperature max-tokens user-prompt)))
+      (setf (extraction-result-instance result)
+            (gethash "value" (extraction-result-instance result)))
+      result)))
+
 (defun %extract-with-retry (backend compilation document
                             max-retries temperature max-tokens user-prompt)
   (let* ((schema (extraction-compilation-schema compilation))
