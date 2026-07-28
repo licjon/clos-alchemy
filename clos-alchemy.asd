@@ -3,7 +3,7 @@
   :author "Jonathan Hustad"
   :license "MIT"
   :description "Extract structured data from text via LLMs, constructing typed CLOS instances."
-  :depends-on ("closer-mop" "yason" "cl-llm-backend")
+  :depends-on ("closer-mop" "yason" "cl-ppcre" "cl-llm-backend")
   :serial t
   :components ((:module "src"
                 :serial t
@@ -40,7 +40,8 @@
                  (:file "unsupported-types")
                  (:file "schema-conformance")
                  (:file "custom-validation")
-                 (:file "union"))))
+                 (:file "union")
+                 (:file "constraints"))))
   :perform (test-op (op c) (symbol-call :rove :run c)))
 
 ;;; Gated: needs llama.cpp built as a shared library, so it stays out of the
@@ -61,4 +62,5 @@
                 ((:file "extract-llama")
                  (:file "classify-llama")
                  (:file "validate-llama")
-                 (:file "union-llama")))))
+                 (:file "union-llama")
+                 (:file "constraints-llama")))))

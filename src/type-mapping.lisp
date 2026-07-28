@@ -48,17 +48,65 @@ SLOT-TYPES is unused here (consumed by class-to-schema before calling this)."
                           (make-ir-type-primitive :kind :string))
         :container :vector))
       ((integer unsigned-byte signed-byte mod)
-       (make-ir-type-primitive :kind :integer))
+       (%map-integer-compound-type head args))
       ((float single-float double-float short-float long-float)
-       (make-ir-type-primitive :kind :number :numeric-type (%float-numeric-type head)))
+       (%map-float-compound-type head args))
       ((real rational)
        (make-ir-type-primitive :kind :number))
       ((string base-string simple-string simple-base-string)
-       (make-ir-type-primitive :kind :string))
+       (%map-string-compound-type args))
       (t
        (error 'schema-error
               :class-name spec
               :reason (format nil "unsupported compound type specifier: ~S" spec))))))
+
+(defun %bound-or-nil (value)
+  "Return VALUE as a numeric bound, or nil if it is * or absent."
+  (if (or (null value) (eq value '*))
+      nil
+      value))
+
+(defun %map-integer-compound-type (head args)
+  "Map (integer low high), (unsigned-byte n), (signed-byte n), (mod n)."
+  (case head
+    (integer
+     (let ((lo (%bound-or-nil (first args)))
+           (hi (%bound-or-nil (second args))))
+       (make-ir-type-primitive :kind :integer :minimum lo :maximum hi)))
+    (unsigned-byte
+     (let ((bits (first args)))
+       (if (and bits (not (eq bits '*)))
+           (make-ir-type-primitive :kind :integer
+                                   :minimum 0
+                                   :maximum (1- (expt 2 bits)))
+           (make-ir-type-primitive :kind :integer))))
+    (signed-byte
+     (let ((bits (first args)))
+       (if (and bits (not (eq bits '*)))
+           (make-ir-type-primitive :kind :integer
+                                   :minimum (- (expt 2 (1- bits)))
+                                   :maximum (1- (expt 2 (1- bits))))
+           (make-ir-type-primitive :kind :integer))))
+    (mod
+     (let ((n (first args)))
+       (make-ir-type-primitive :kind :integer
+                               :minimum 0
+                               :maximum (1- n))))))
+
+(defun %map-float-compound-type (head args)
+  "Map (float low high) and friends, extracting numeric bounds."
+  (let ((lo (%bound-or-nil (first args)))
+        (hi (%bound-or-nil (second args))))
+    (make-ir-type-primitive :kind :number
+                            :numeric-type (%float-numeric-type head)
+                            :minimum lo
+                            :maximum hi)))
+
+(defun %map-string-compound-type (args)
+  "Map (string size), extracting max-length from the size argument."
+  (let ((size (%bound-or-nil (first args))))
+    (make-ir-type-primitive :kind :string
+                            :max-length size)))
 
 (defun %map-member-type (members)
   "Map (member :a :b :c) or (member \"x\" \"y\") to ir-type-enum."

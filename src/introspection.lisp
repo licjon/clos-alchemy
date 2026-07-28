@@ -71,6 +71,7 @@ SLOT-TYPES: alist of (slot-name . type-spec) overrides for MOP-reported types."
                       (t
                        (cl-type-to-ir-type type-spec :schema-cache cache))))
            (nullable-p (ir-type-nullable-p ir-type)))
+      (%apply-slot-constraints slot ir-type)
       (make-ir-field :name (lisp-name-to-json-name slot-name)
                      :type ir-type
                      :required-p required-p
@@ -109,6 +110,26 @@ Slot-types overrides take precedence (no :map-of in that path)."
         (if (functionp v)
             v
             (coerce v 'function))))))
+
+(defun %apply-slot-constraints (slot ir-type)
+  "Apply metaclass constraint slot options onto the IR type node.
+Explicit slot options override any constraints inferred from the CL type specifier."
+  (when (typep slot 'constructor-effective-slot-definition)
+    (macrolet ((override (accessor struct-slot)
+                 `(let ((v (,accessor slot)))
+                    (when v
+                      (setf (,struct-slot ir-type) v)))))
+      (when (ir-type-primitive-p ir-type)
+        (override slot-definition-minimum ir-type-primitive-minimum)
+        (override slot-definition-maximum ir-type-primitive-maximum)
+        (override slot-definition-exclusive-minimum ir-type-primitive-exclusive-minimum)
+        (override slot-definition-exclusive-maximum ir-type-primitive-exclusive-maximum)
+        (override slot-definition-min-length ir-type-primitive-min-length)
+        (override slot-definition-max-length ir-type-primitive-max-length)
+        (override slot-definition-pattern ir-type-primitive-pattern))
+      (when (ir-type-list-p ir-type)
+        (override slot-definition-min-items ir-type-list-min-items)
+        (override slot-definition-max-items ir-type-list-max-items)))))
 
 (defun %include-slot-p (slot field mode slot-list)
   "Determine whether a slot should be included based on extraction mode."

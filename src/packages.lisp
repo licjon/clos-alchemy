@@ -4,11 +4,16 @@
    ;; IR type nodes
    #:ir-type-primitive #:ir-type-primitive-p #:ir-type-primitive-kind
    #:ir-type-primitive-numeric-type
+   #:ir-type-primitive-minimum #:ir-type-primitive-maximum
+   #:ir-type-primitive-exclusive-minimum #:ir-type-primitive-exclusive-maximum
+   #:ir-type-primitive-min-length #:ir-type-primitive-max-length
+   #:ir-type-primitive-pattern
    #:make-ir-type-primitive
    #:ir-type-enum #:ir-type-enum-p #:ir-type-enum-values
    #:make-ir-type-enum
    #:ir-type-list #:ir-type-list-p #:ir-type-list-element-type
    #:ir-type-list-container
+   #:ir-type-list-min-items #:ir-type-list-max-items
    #:make-ir-type-list
    #:ir-type-object #:ir-type-object-p #:ir-type-object-schema
    #:make-ir-type-object
@@ -66,6 +71,11 @@
    #:slot-definition-list-of
    #:slot-definition-map-of
    #:slot-definition-validate
+   #:slot-definition-minimum #:slot-definition-maximum
+   #:slot-definition-exclusive-minimum #:slot-definition-exclusive-maximum
+   #:slot-definition-min-length #:slot-definition-max-length
+   #:slot-definition-pattern
+   #:slot-definition-min-items #:slot-definition-max-items
 
    ;; Type mapping
    #:cl-type-to-ir-type
