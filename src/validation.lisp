@@ -57,11 +57,47 @@ Returns (values valid-p error-list). Errors are collected, not signaled."
           (:number (numberp value))
           (:boolean (or (eq value t) (eq value nil)
                         (equal value :true) (equal value :false))))
-        nil
+        (%validate-primitive-constraints value ir-type field-name)
         (list (make-condition 'validation-error
                               :field-name field-name
                               :expected (string-downcase (symbol-name kind))
                               :actual (format nil "~S" value))))))
+
+(defun %validate-primitive-constraints (value ir-type field-name)
+  "Validate numeric bounds, string length, and pattern constraints."
+  (let ((errors '()))
+    (macrolet ((check (test expected-fmt &rest fmt-args)
+                 `(unless ,test
+                    (push (make-condition 'validation-error
+                                          :field-name field-name
+                                          :expected (format nil ,expected-fmt ,@fmt-args)
+                                          :actual (format nil "~S" value))
+                          errors))))
+      (let ((lo (ir-type-primitive-minimum ir-type)))
+        (when (and lo (numberp value) (< value lo))
+          (check nil ">= ~A" lo)))
+      (let ((hi (ir-type-primitive-maximum ir-type)))
+        (when (and hi (numberp value) (> value hi))
+          (check nil "<= ~A" hi)))
+      (let ((elo (ir-type-primitive-exclusive-minimum ir-type)))
+        (when (and elo (numberp value) (<= value elo))
+          (check nil "> ~A" elo)))
+      (let ((ehi (ir-type-primitive-exclusive-maximum ir-type)))
+        (when (and ehi (numberp value) (>= value ehi))
+          (check nil "< ~A" ehi)))
+      (let ((minl (ir-type-primitive-min-length ir-type)))
+        (when (and minl (stringp value) (< (length value) minl))
+          (check nil "length >= ~A" minl)))
+      (let ((maxl (ir-type-primitive-max-length ir-type)))
+        (when (and maxl (stringp value) (> (length value) maxl))
+          (check nil "length <= ~A" maxl)))
+      ;; cl-ppcre uses Perl-compatible regex; JSON Schema specifies ECMA-262.
+      ;; Most patterns work in both, but exotic features may diverge.
+      (let ((pat (ir-type-primitive-pattern ir-type)))
+        (when (and pat (stringp value)
+                   (not (cl-ppcre:scan pat value)))
+          (check nil "match pattern ~S" pat))))
+    (nreverse errors)))
 
 (defun %validate-enum (value ir-type field-name)
   (if (and (stringp value) (member value (ir-type-enum-values ir-type) :test #'string=))
@@ -77,10 +113,27 @@ Returns (values valid-p error-list). Errors are collected, not signaled."
                             :field-name field-name
                             :expected "array"
                             :actual (format nil "~S" value)))
-      (loop for elem in value
-            for i from 0
-            nconc (%validate-type elem (ir-type-list-element-type ir-type)
-                                  (format nil "~A[~D]" field-name i)))))
+      (let ((errors '())
+            (len (length value)))
+        (let ((mi (ir-type-list-min-items ir-type)))
+          (when (and mi (< len mi))
+            (push (make-condition 'validation-error
+                                  :field-name field-name
+                                  :expected (format nil "at least ~A items" mi)
+                                  :actual (format nil "~A items" len))
+                  errors)))
+        (let ((ma (ir-type-list-max-items ir-type)))
+          (when (and ma (> len ma))
+            (push (make-condition 'validation-error
+                                  :field-name field-name
+                                  :expected (format nil "at most ~A items" ma)
+                                  :actual (format nil "~A items" len))
+                  errors)))
+        (nconc (nreverse errors)
+               (loop for elem in value
+                     for i from 0
+                     nconc (%validate-type elem (ir-type-list-element-type ir-type)
+                                           (format nil "~A[~D]" field-name i)))))))
 
 (defun %validate-object (value ir-type field-name)
   (if (not (hash-table-p value))

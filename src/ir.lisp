@@ -4,7 +4,14 @@
 
 (defstruct (ir-type-primitive (:copier nil))
   (kind :string :type (member :string :integer :number :boolean))
-  (numeric-type nil :type (or symbol null)))
+  (numeric-type nil :type (or symbol null))
+  (minimum nil :type (or real null))
+  (maximum nil :type (or real null))
+  (exclusive-minimum nil :type (or real null))
+  (exclusive-maximum nil :type (or real null))
+  (min-length nil :type (or integer null))
+  (max-length nil :type (or integer null))
+  (pattern nil :type (or string null)))
 
 (defstruct (ir-type-enum (:copier nil))
   (values nil :type list))
@@ -12,7 +19,9 @@
 (defstruct (ir-type-list (:copier nil))
   (element-type nil)
   ;; :list or :vector — which CL sequence construction should produce
-  (container :list :type (member :list :vector)))
+  (container :list :type (member :list :vector))
+  (min-items nil :type (or integer null))
+  (max-items nil :type (or integer null)))
 
 (defstruct (ir-type-object (:copier nil))
   (schema nil))
