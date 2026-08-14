@@ -1,10 +1,10 @@
 (defpackage #:clos-alchemy/tests/gbnf-conformance
   (:use #:cl #:rove #:clos-alchemy)
-  (:import-from #:cl-llama-cpp-extras/json-schema #:json-schema-to-grammar))
+  (:import-from #:cl-llama-cpp/common/json-schema #:json-schema-to-grammar))
 
 (in-package #:clos-alchemy/tests/gbnf-conformance)
 
-;;;; Gated: requires cl-llama-cpp-extras, which needs llama.cpp built as a
+;;;; Gated: requires cl-llama-cpp/common, which needs llama.cpp built as a
 ;;;; shared library. Kept out of the core test system for that reason — see
 ;;;; README.md:68-85. Load via the clos-alchemy/tests/gbnf system.
 ;;;;
@@ -61,9 +61,13 @@
 (deftest gbnf/optional-field-keeps-its-place-in-generation-order
   (testing "the grammar's root rule must still emit fields in slot order —
 the chain-of-thought ordering documented at README:300"
-    (let ((grammar (json-schema-to-grammar
-                    (schema-to-json-schema (class-to-schema 'optional-slot)))))
-      (ok (< (search "reason-kv" grammar) (search "nick-kv" grammar))))))
+    (let* ((grammar (json-schema-to-grammar
+                     (schema-to-json-schema (class-to-schema 'optional-slot))))
+           (root-start (search "root ::=" grammar))
+           (root-end (or (search (string #\Newline) grammar :start2 root-start)
+                         (length grammar)))
+           (root-rule (subseq grammar root-start root-end)))
+      (ok (< (search "reason-kv" root-rule) (search "nick-kv" root-rule))))))
 
 ;;; Date types (#12)
 
