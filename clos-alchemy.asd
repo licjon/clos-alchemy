@@ -48,8 +48,8 @@
 ;;; Gated: needs llama.cpp built as a shared library, so it stays out of the
 ;;; core test system. Asserts emitted schemas compile to GBNF grammars.
 (defsystem "clos-alchemy/tests/gbnf"
-  :description "GBNF conformance tests for clos-alchemy (requires cl-llama-cpp-extras)"
-  :depends-on ("clos-alchemy" "cl-llama-cpp-extras/json-schema" "rove")
+  :description "GBNF conformance tests for clos-alchemy (requires cl-llama-cpp/common)"
+  :depends-on ("clos-alchemy" "cl-llama-cpp/common/json-schema" "rove")
   :components ((:module "tests"
                 :components
                 ((:file "gbnf-conformance"))))
