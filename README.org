@@ -3,9 +3,9 @@
 
 Extract structured data from unstructured text via LLMs into typed CLOS instances.
 
-Define ordinary CLOS classes. =clos-alchemy= introspects them via the MOP,
-generates a JSON Schema, constrains the LLM to produce valid output, then
-constructs and returns typed instances with working accessors.
+Define ordinary CLOS classes — or pass a bare CL type specifier for single
+values. =clos-alchemy= introspects your types via the MOP, generates a JSON
+Schema with constraints, and returns typed CLOS instances or unwrapped values.
 
 * Why
 
@@ -41,6 +41,36 @@ destructure — if it type-checks as your class, you're done.
 The returned instance is a real CLOS object — =typep=, =slot-value=, and all
 accessors work as expected.
 
+** Primitive extraction
+
+When the extraction target is a single value, skip the wrapper class and pass
+a CL type specifier directly:
+
+#+begin_src lisp
+;; Extract a bare integer
+(extract-value backend 'integer
+  "The tower stands 330 metres tall."
+  :user-prompt "Extract the height in metres.")
+;; => 330
+
+;; Sentiment as an enum keyword
+(extract-value backend '(member :positive :negative :neutral)
+  "I've been waiting three weeks and I'm furious."
+  :user-prompt "What is the sentiment?")
+;; => :NEGATIVE
+
+;; Bounded integer via type specifier
+(extract-value backend '(integer 1 5)
+  "The critic gave it 4 out of 5 stars."
+  :user-prompt "Extract the star rating.")
+;; => 4
+#+end_src
+
+=extract-value= supports all types =cl-type-to-ir-type= handles: primitives,
+enums, lists (=(vector string)=), constrained integers, and so on. The
+returned =extraction-result-instance= is the unwrapped value, not a CLOS
+object.
+
 * Installation
 
 Not yet in Quicklisp — clone this repo and [[https://github.com/licjon/cl-llm-backend][cl-llm-backend]] into a directory
@@ -53,8 +83,8 @@ git clone https://github.com/licjon/clos-alchemy
 git clone https://github.com/licjon/cl-llm-backend
 #+end_src
 
-Then load the core system — the remaining dependencies (=closer-mop=, =yason=)
-come from Quicklisp automatically:
+Then load the core system — the remaining dependencies (=closer-mop=, =yason=,
+=cl-ppcre=) come from Quicklisp automatically:
 
 #+begin_src lisp
 (ql:quickload :clos-alchemy)
@@ -92,7 +122,7 @@ examples.
 
 | System                      | Description                                                         | Dependencies                                |
 |-----------------------------+---------------------------------------------------------------------+---------------------------------------------|
-| =clos-alchemy=            | Core library — introspection, IR, schema                            | =closer-mop=, =yason=, =cl-llm-backend=          |
+| =clos-alchemy=            | Core library — introspection, IR, schema                            | =closer-mop=, =yason=, =cl-ppcre=, =cl-llm-backend= |
 | =clos-alchemy/tests=      | Core test suite                                                     | =rove=                                        |
 | =clos-alchemy/tests/gbnf= | GBNF conformance tests (asserts schemas compile to GBNF grammars)   | =rove=, =cl-llama-cpp-extras/json-schema=      |
 | =clos-alchemy/examples=   | Example programs                                                    | =clos-alchemy=, =cl-llm-backend/llama=         |
@@ -155,7 +185,7 @@ Type specifiers on CLOS slots map to JSON Schema types:
 |------------------------------------+-----------------------------------+-------------------|
 | =string=, =(string N)=                 | ={"type":"string"}=                 | =ir-type-primitive= |
 | =integer=, =fixnum=, =(integer lo hi)=   | ={"type":"integer"}=                | =ir-type-primitive= |
-| =(unsigned-byte N)=, =(mod N)=         | ={"type":"integer"}=                | =ir-type-primitive= |
+| =(unsigned-byte N)=, =(signed-byte N)=, =(mod N)= | ={"type":"integer"}=         | =ir-type-primitive= |
 | =float=, =number=, =(float lo hi)=, =real= | ={"type":"number"}=                 | =ir-type-primitive= |
 | =boolean=                            | ={"type":"boolean"}=                | =ir-type-primitive= |
 | =(member :a :b :c)=                  | ={"enum":["a","b","c"]}=            | =ir-type-enum=      |
@@ -235,6 +265,53 @@ shared discriminator slot typed as a single-value =(member :tag)= enum:
 The returned instance is whichever CLOS class the model selected. Unions
 compose with list, nullable, map, and nested-object types.
 
+** Schema constraints
+
+CL type specifiers with bounds automatically emit JSON Schema constraints:
+
+| CL type specifier      | Emitted constraints                       |
+|------------------------+-------------------------------------------|
+| =(integer lo hi)=        | =minimum=, =maximum=                         |
+| =(float lo hi)=          | =minimum=, =maximum=                         |
+| =(unsigned-byte N)=      | =minimum: 0=, =maximum: 2^N-1=                |
+| =(signed-byte N)=        | =minimum: -2^(N-1)=, =maximum: 2^(N-1)-1=     |
+| =(mod N)=                | =minimum: 0=, =maximum: N-1=                  |
+| =(string N)=             | =maxLength: N=                              |
+
+For constraints that CL type specifiers can't express, use metaclass slot
+options (requires =constructor-class=):
+
+| Slot option           | JSON Schema keyword    | Applies to |
+|-----------------------+------------------------+------------|
+| =:minimum=              | =minimum=                | numbers    |
+| =:maximum=              | =maximum=                | numbers    |
+| =:exclusive-minimum=    | =exclusiveMinimum=       | numbers    |
+| =:exclusive-maximum=    | =exclusiveMaximum=       | numbers    |
+| =:min-length=           | =minLength=              | strings    |
+| =:max-length=           | =maxLength=              | strings    |
+| =:pattern=              | =pattern=                | strings    |
+| =:min-items=            | =minItems=               | arrays     |
+| =:max-items=            | =maxItems=               | arrays     |
+
+Slot options override type-inferred bounds when both are present:
+
+#+begin_src lisp
+(defclass user-profile ()
+  ((username  :initarg :username  :type string
+              :min-length 3 :max-length 20
+              :pattern "^[a-zA-Z][a-zA-Z0-9_]*$")
+   (rating    :initarg :rating    :type (integer 1 10)
+              :minimum 1 :maximum 5
+              :documentation "Slot options narrow the type's 1-10 range to 1-5")
+   (interests :initarg :interests :type list :list-of string
+              :min-items 1 :max-items 5))
+  (:metaclass clos-alchemy:constructor-class))
+#+end_src
+
+Constraints are emitted into the JSON Schema so the model respects them during
+generation. The validator enforces the same bounds — violations caught on a
+backend that doesn't enforce them trigger the corrective retry loop.
+
 ** Unsupported types
 
 Any other type specifier signals a =schema-error= — named types with no JSON
@@ -299,6 +376,7 @@ self-correct.
 - =compile-extractor (class &key mode slot-list slot-types user-prompt)= — pre-compile the extraction pipeline. Returns a reusable =extraction-compilation= with a cached IR schema and system prompt.
 - =extract (backend compilation-or-class document &key max-retries temperature max-tokens user-prompt)= — extract a single instance.
 - =extract-list (backend compilation-or-class document &key ...)= — extract multiple instances; the result's instance slot is a list (possibly empty).
+- =extract-value (backend type-spec document &key max-retries temperature max-tokens user-prompt)= — extract a single value of a CL type specifier; the result's instance slot is the unwrapped value.
 - =compile-union-extractor (classes &key discriminator user-prompt)= — pre-compile a discriminated union extraction pipeline.
 - =extract-union (backend compilation-or-classes document &key discriminator max-retries temperature max-tokens user-prompt)= — extract one of N union shapes.
 - =validate-instance (instance)= — generic function for cross-field validation. Default returns =nil=; specialize on your class.
@@ -348,7 +426,7 @@ matching the schema, eliminating post-hoc parsing failures.
   library introspects it. No metaclass needed for the common cases — plain
   =list= slots default to string elements and =(vector <type>)= works
   anywhere. =constructor-class= is opt-in, only for custom slot options
-  (=:list-of=, =:map-of=, =:validate=).
+  (=:list-of=, =:map-of=, =:validate=, constraint options).
 
 * Examples
 
@@ -423,6 +501,31 @@ typed slots.
       "/path/to/model.gguf")
 
 (clos-alchemy/examples/validate-llama:run)
+#+end_src
+
+** Schema constraints (=constraints-llama=)
+
+Type-inferred numeric bounds (=(integer 0 100)=, =(float 0.0 4.0)=), slot
+option constraints (=:min-length=, =:pattern=, =:min-items=), and combined
+constraints where slot options narrow type-inferred ranges.
+
+#+begin_src lisp
+(setf clos-alchemy/examples/constraints-llama::*model-path*
+      "/path/to/model.gguf")
+
+(clos-alchemy/examples/constraints-llama:run)
+#+end_src
+
+** Primitive extraction (=value-llama=)
+
+Extracts bare values without wrapper classes: integer, boolean, enum keyword,
+string vector, and constrained integer via =extract-value=.
+
+#+begin_src lisp
+(setf clos-alchemy/examples/value-llama::*model-path*
+      "/path/to/model.gguf")
+
+(clos-alchemy/examples/value-llama:run)
 #+end_src
 
 ** Discriminated union (=union-llama=)
