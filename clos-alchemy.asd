@@ -55,9 +55,30 @@
                 ((:file "gbnf-conformance"))))
   :perform (test-op (op c) (symbol-call :rove :run c)))
 
+(defsystem "clos-alchemy/telemetry"
+  :description "Reference consumers for clos-alchemy's extraction lifecycle conditions (issue #30)"
+  :version "0.1.0"
+  :author "Jonathan Hustad"
+  :license "MIT"
+  :depends-on ("clos-alchemy")
+  :serial t
+  :components ((:module "telemetry"
+                :serial t
+                :components
+                ((:file "packages")
+                 (:file "logging")))))
+
+(defsystem "clos-alchemy/telemetry/tests"
+  :description "Tests for clos-alchemy/telemetry"
+  :depends-on ("clos-alchemy/telemetry" "rove")
+  :components ((:module "tests"
+                :components
+                ((:file "telemetry"))))
+  :perform (test-op (op c) (symbol-call :rove :run c)))
+
 (defsystem "clos-alchemy/examples"
   :description "Example programs for clos-alchemy"
-  :depends-on ("clos-alchemy" "cl-llm-backend/llama")
+  :depends-on ("clos-alchemy" "clos-alchemy/telemetry" "cl-llm-backend/llama")
   :components ((:module "examples"
                 :components
                 ((:file "extract-llama")
@@ -65,4 +86,5 @@
                  (:file "validate-llama")
                  (:file "union-llama")
                  (:file "constraints-llama")
-                 (:file "value-llama")))))
+                 (:file "value-llama")
+                 (:file "telemetry")))))
