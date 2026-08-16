@@ -66,6 +66,14 @@
    #:max-retries-error-raw-response #:max-retries-error-raw-data
    #:max-retries-error-usage #:max-retries-error-attempts
 
+   ;; Lifecycle observability conditions (issue #30)
+   #:extraction-event
+   #:extraction-event-attempt-number #:extraction-event-raw-response
+   #:extraction-event-raw-data #:extraction-event-parse-error
+   #:extraction-event-validation-errors #:extraction-event-usage
+   #:extraction-attempt #:extraction-retry #:extraction-exhausted
+   #:abort-extraction #:retry-with-backend
+
    ;; Metaclass
    #:constructor-class
    #:slot-definition-list-of

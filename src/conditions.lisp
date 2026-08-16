@@ -44,3 +44,33 @@
              (format s "Extraction failed after ~D retries with ~D errors"
                      (max-retries-error-retries c)
                      (length (max-retries-error-errors c))))))
+
+;;; Lifecycle observability (issue #30). These are plain CONDITIONs, never
+;;; ERRORs — SIGNAL on an unhandled condition is a no-op, so %extract-with-retry
+;;; can signal them unconditionally with zero behavior change for callers who
+;;; never bind a handler.
+
+(define-condition extraction-event (condition)
+  ((attempt-number :initarg :attempt-number :reader extraction-event-attempt-number)
+   (raw-response :initarg :raw-response :reader extraction-event-raw-response)
+   (raw-data :initarg :raw-data :reader extraction-event-raw-data :initform nil)
+   (parse-error :initarg :parse-error :reader extraction-event-parse-error :initform nil)
+   (validation-errors :initarg :validation-errors :reader extraction-event-validation-errors
+                      :initform nil)
+   (usage :initarg :usage :reader extraction-event-usage :initform nil))
+  (:documentation "Base class for extraction lifecycle observability conditions."))
+
+(define-condition extraction-attempt (extraction-event) ()
+  (:documentation
+   "Signaled once per attempt, success or failure, right after that attempt's
+raw response has been parsed and validated."))
+
+(define-condition extraction-retry (extraction-event) ()
+  (:documentation
+   "Signaled when an attempt failed and another attempt will run. Establishes
+the ABORT-EXTRACTION and RETRY-WITH-BACKEND restarts."))
+
+(define-condition extraction-exhausted (extraction-event) ()
+  (:documentation
+   "Signaled immediately before MAX-RETRIES-ERROR is raised, whether reached
+by running out of attempts or via the ABORT-EXTRACTION restart."))

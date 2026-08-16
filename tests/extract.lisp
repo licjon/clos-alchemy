@@ -300,3 +300,121 @@
         (max-retries-error (e)
           (ok (= 3 (length (max-retries-error-errors e))))
           (ok (listp (max-retries-error-errors e))))))))
+
+;;; ── Lifecycle hooks (issue #30) ───────────────────────────────────
+
+(deftest extraction-attempt-signals-on-success
+  (testing "a single successful attempt signals extraction-attempt exactly once"
+    (let ((backend (make-mock-backend :responses (list (good-data))))
+          (events '()))
+      (handler-bind ((extraction-attempt (lambda (e) (push e events))))
+        (extract backend 'item "text"))
+      (ok (= 1 (length events)))
+      (let ((event (first events)))
+        (ok (= 0 (extraction-event-attempt-number event)))
+        (ok (hash-table-p (extraction-event-raw-data event)))
+        (ok (string= "widget" (gethash "name" (extraction-event-raw-data event))))
+        (ok (null (extraction-event-parse-error event)))
+        (ok (null (extraction-event-validation-errors event)))
+        (ok (numberp (getf (extraction-event-usage event) :prompt-tokens)))
+        (ok (numberp (getf (extraction-event-usage event) :completion-tokens)))))))
+
+(deftest extraction-attempt-signals-on-each-attempt-including-failures
+  (testing "one event per attempt, each carrying that attempt's own errors"
+    (let ((backend (make-mock-backend
+                    :responses (list (bad-data-wrong-type) (good-data))))
+          (events '()))
+      (handler-bind ((extraction-attempt (lambda (e) (push e events))))
+        (extract backend 'item "text" :max-retries 3))
+      (setf events (nreverse events))
+      (ok (= 2 (length events)))
+      (ok (= 0 (extraction-event-attempt-number (first events))))
+      (ok (= 1 (length (extraction-event-validation-errors (first events)))))
+      (ok (= 1 (extraction-event-attempt-number (second events))))
+      (ok (null (extraction-event-validation-errors (second events)))))))
+
+(deftest extraction-attempt-carries-parse-error-on-parse-failure
+  (testing "a parse failure attempt sets parse-error and leaves raw-data nil"
+    (let ((backend (make-mock-backend
+                    :responses (list "not json at all" (good-data))))
+          (events '()))
+      (handler-bind ((extraction-attempt (lambda (e) (push e events))))
+        (extract backend 'item "text" :max-retries 3))
+      (setf events (nreverse events))
+      (ok (typep (extraction-event-parse-error (first events)) 'generation-error))
+      (ok (null (extraction-event-raw-data (first events))))
+      (ok (null (extraction-event-validation-errors (first events)))))))
+
+(deftest extraction-retry-signals-once-per-failure-with-a-next-attempt
+  (testing "extraction-retry fires for each failing attempt that has a next attempt"
+    (let ((backend (make-mock-backend
+                    :responses (list (bad-data-wrong-type)
+                                     (bad-data-missing-field)
+                                     (good-data))))
+          (count 0))
+      (handler-bind ((extraction-retry (lambda (e) (declare (ignore e)) (incf count))))
+        (extract backend 'item "text" :max-retries 3))
+      (ok (= 2 count)))))
+
+(deftest extraction-retry-not-signaled-on-final-attempt-failure
+  (testing "the last attempt's failure exhausts naturally without an extraction-retry signal"
+    (let ((backend (make-mock-backend :responses (list (bad-data-wrong-type))))
+          (count 0))
+      (handler-bind ((extraction-retry (lambda (e) (declare (ignore e)) (incf count))))
+        (handler-case (extract backend 'item "text" :max-retries 0)
+          (max-retries-error () nil)))
+      (ok (= 0 count)))))
+
+(deftest extraction-exhausted-signals-once-before-max-retries-error
+  (testing "extraction-exhausted fires with cumulative diagnostics matching the raised error"
+    (let ((backend (make-mock-backend
+                    :responses (list (bad-data-wrong-type) (bad-data-wrong-type))))
+          (captured nil))
+      (handler-bind ((extraction-exhausted (lambda (e) (setf captured e))))
+        (handler-case (extract backend 'item "text" :max-retries 1)
+          (max-retries-error (err)
+            (ok (not (null captured)))
+            (ok (= (length (max-retries-error-errors err))
+                   (length (extraction-event-validation-errors captured))))
+            (ok (equal (max-retries-error-usage err)
+                       (extraction-event-usage captured)))))))))
+
+(deftest abort-extraction-restart-raises-early-with-actual-attempt-count
+  (testing "invoking abort-extraction stops the loop immediately"
+    (let ((backend (make-mock-backend :responses (list (bad-data-wrong-type)))))
+      (handler-bind ((extraction-retry
+                       (lambda (e) (declare (ignore e))
+                         (invoke-restart 'abort-extraction))))
+        (handler-case (extract backend 'item "text" :max-retries 3)
+          (max-retries-error (e)
+            (ok (= 0 (max-retries-error-retries e)))
+            (ok (= 1 (mock-backend-calls backend)))))))))
+
+(deftest retry-with-backend-restart-swaps-backend-for-remaining-attempts
+  (testing "retry-with-backend routes subsequent attempts to the new backend"
+    (let ((backend-a (make-mock-backend :responses (list (bad-data-wrong-type))))
+          (backend-b (make-mock-backend :responses (list (good-data)))))
+      (handler-bind ((extraction-retry
+                       (lambda (e) (declare (ignore e))
+                         (invoke-restart 'retry-with-backend backend-b))))
+        (let ((result (extract backend-a 'item "text" :max-retries 3)))
+          (ok (typep (extraction-result-instance result) 'item))
+          (ok (= 1 (mock-backend-calls backend-a)))
+          (ok (= 1 (mock-backend-calls backend-b))))))))
+
+(deftest retry-with-backend-restart-can-swap-repeatedly-across-attempts
+  (testing "backend hopping: each swap only redirects its own remaining attempts"
+    (let ((backend-a (make-mock-backend :responses (list (bad-data-wrong-type))))
+          (backend-b (make-mock-backend :responses (list (bad-data-missing-field))))
+          (backend-c (make-mock-backend :responses (list (good-data)))))
+      (handler-bind ((extraction-retry
+                       (lambda (e)
+                         (invoke-restart 'retry-with-backend
+                                         (if (= 0 (extraction-event-attempt-number e))
+                                             backend-b
+                                             backend-c)))))
+        (let ((result (extract backend-a 'item "text" :max-retries 5)))
+          (ok (typep (extraction-result-instance result) 'item))
+          (ok (= 1 (mock-backend-calls backend-a)))
+          (ok (= 1 (mock-backend-calls backend-b)))
+          (ok (= 1 (mock-backend-calls backend-c))))))))

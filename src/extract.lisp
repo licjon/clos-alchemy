@@ -88,77 +88,127 @@ Returns an extraction-result whose instance slot is the unwrapped value."
          (accumulated-usage nil)
          (last-raw-response nil)
          (last-raw-data nil)
-         (retry-context nil))
-    (loop for attempt from 0 to max-retries
-          do (let* ((user-content
-                      (with-output-to-string (s)
-                        (when user-prompt (format s "~A~%~%" user-prompt))
-                        (write-string document s)
-                        (when retry-context (format s "~%~%~A" retry-context))))
-                    (messages
-                      (list (list :role "system" :content system-prompt)
-                            (list :role "user" :content user-content))))
-               (multiple-value-bind (raw-response info)
-                   (llm:backend-generate backend messages
-                                         :output-schema json-schema
-                                         :temperature temperature
-                                         :max-tokens (or max-tokens 1024))
-                 (setf last-raw-response raw-response)
-                 (setf accumulated-usage (%accumulate-usage accumulated-usage info))
-                 (handler-case
-                     (let ((raw-data (parse-json-response raw-response)))
-                       (multiple-value-bind (valid-p errors)
-                           (validate-data raw-data schema)
-                         (if valid-p
-                             (let* ((instance (construct-from-data raw-data schema))
-                                    (instance-errors
-                                      (%run-instance-validators instance)))
-                               (if instance-errors
-                                   (progn
-                                     (setf last-raw-data raw-data)
-                                     (push (list :raw-response raw-response
-                                                 :raw-data raw-data
-                                                 :errors (copy-list instance-errors))
-                                           accumulated-attempts)
-                                     (setf accumulated-errors
-                                           (nconc accumulated-errors instance-errors))
-                                     (setf retry-context
-                                           (%format-retry-context instance-errors)))
-                                   (return-from %extract-with-retry
-                                     (make-extraction-result
-                                      :instance instance
-                                      :raw-data raw-data
-                                      :raw-response raw-response
-                                      :retries attempt
-                                      :usage (%info-to-usage info)))))
-                             (progn
-                               (setf last-raw-data raw-data)
-                               (push (list :raw-response raw-response
-                                           :raw-data raw-data
-                                           :errors (copy-list errors))
-                                     accumulated-attempts)
-                               (setf accumulated-errors
-                                     (nconc accumulated-errors errors))
-                               (setf retry-context
-                                     (%format-retry-context errors))))))
-                   (generation-error (e)
-                     (setf last-raw-data nil)
-                     (let ((err (format nil "Parse failure: ~A"
-                                        (generation-error-reason e))))
-                       (push err accumulated-errors)
-                       (push (list :raw-response raw-response
-                                   :raw-data nil
-                                   :errors (list err))
-                             accumulated-attempts))
-                     (setf retry-context
-                           (%format-parse-retry-context e raw-response)))))))
-    (error 'max-retries-error
-           :retries max-retries
-           :errors accumulated-errors
-           :raw-response last-raw-response
-           :raw-data last-raw-data
-           :usage accumulated-usage
-           :attempts (nreverse accumulated-attempts))))
+         (retry-context nil)
+         (current-backend backend))
+    (labels ((%raise-exhausted (retries)
+               (signal 'extraction-exhausted
+                       :attempt-number retries
+                       :raw-response last-raw-response
+                       :raw-data last-raw-data
+                       :validation-errors accumulated-errors
+                       :usage accumulated-usage)
+               (error 'max-retries-error
+                      :retries retries
+                      :errors accumulated-errors
+                      :raw-response last-raw-response
+                      :raw-data last-raw-data
+                      :usage accumulated-usage
+                      :attempts (nreverse accumulated-attempts)))
+             (%offer-retry (attempt raw-response this-attempt-errors &key parse-error)
+               (when (< attempt max-retries)
+                 (restart-case
+                     (signal 'extraction-retry
+                             :attempt-number attempt
+                             :raw-response raw-response
+                             :raw-data last-raw-data
+                             :parse-error parse-error
+                             :validation-errors this-attempt-errors
+                             :usage accumulated-usage)
+                   (abort-extraction () (%raise-exhausted attempt))
+                   (retry-with-backend (new-backend) (setf current-backend new-backend))))))
+      (loop for attempt from 0 to max-retries
+            do (let* ((user-content
+                        (with-output-to-string (s)
+                          (when user-prompt (format s "~A~%~%" user-prompt))
+                          (write-string document s)
+                          (when retry-context (format s "~%~%~A" retry-context))))
+                      (messages
+                        (list (list :role "system" :content system-prompt)
+                              (list :role "user" :content user-content))))
+                 (multiple-value-bind (raw-response info)
+                     (llm:backend-generate current-backend messages
+                                           :output-schema json-schema
+                                           :temperature temperature
+                                           :max-tokens (or max-tokens 1024))
+                   (setf last-raw-response raw-response)
+                   (setf accumulated-usage (%accumulate-usage accumulated-usage info))
+                   (handler-case
+                       (let ((raw-data (parse-json-response raw-response)))
+                         (multiple-value-bind (valid-p errors)
+                             (validate-data raw-data schema)
+                           (if valid-p
+                               (let* ((instance (construct-from-data raw-data schema))
+                                      (instance-errors
+                                        (%run-instance-validators instance)))
+                                 (if instance-errors
+                                     (progn
+                                       (setf last-raw-data raw-data)
+                                       (push (list :raw-response raw-response
+                                                   :raw-data raw-data
+                                                   :errors (copy-list instance-errors))
+                                             accumulated-attempts)
+                                       (setf accumulated-errors
+                                             (nconc accumulated-errors instance-errors))
+                                       (signal 'extraction-attempt
+                                               :attempt-number attempt
+                                               :raw-response raw-response
+                                               :raw-data raw-data
+                                               :validation-errors instance-errors
+                                               :usage accumulated-usage)
+                                       (setf retry-context
+                                             (%format-retry-context instance-errors))
+                                       (%offer-retry attempt raw-response instance-errors))
+                                     (progn
+                                       (signal 'extraction-attempt
+                                               :attempt-number attempt
+                                               :raw-response raw-response
+                                               :raw-data raw-data
+                                               :validation-errors nil
+                                               :usage accumulated-usage)
+                                       (return-from %extract-with-retry
+                                         (make-extraction-result
+                                          :instance instance
+                                          :raw-data raw-data
+                                          :raw-response raw-response
+                                          :retries attempt
+                                          :usage (%info-to-usage info))))))
+                               (progn
+                                 (setf last-raw-data raw-data)
+                                 (push (list :raw-response raw-response
+                                             :raw-data raw-data
+                                             :errors (copy-list errors))
+                                       accumulated-attempts)
+                                 (setf accumulated-errors
+                                       (nconc accumulated-errors errors))
+                                 (signal 'extraction-attempt
+                                         :attempt-number attempt
+                                         :raw-response raw-response
+                                         :raw-data raw-data
+                                         :validation-errors errors
+                                         :usage accumulated-usage)
+                                 (setf retry-context
+                                       (%format-retry-context errors))
+                                 (%offer-retry attempt raw-response errors)))))
+                     (generation-error (e)
+                       (setf last-raw-data nil)
+                       (let ((err (format nil "Parse failure: ~A"
+                                          (generation-error-reason e))))
+                         (push err accumulated-errors)
+                         (push (list :raw-response raw-response
+                                     :raw-data nil
+                                     :errors (list err))
+                               accumulated-attempts)
+                         (signal 'extraction-attempt
+                                 :attempt-number attempt
+                                 :raw-response raw-response
+                                 :raw-data nil
+                                 :parse-error e
+                                 :validation-errors nil
+                                 :usage accumulated-usage)
+                         (setf retry-context
+                               (%format-parse-retry-context e raw-response))
+                         (%offer-retry attempt raw-response nil :parse-error e))))))
+            finally (%raise-exhausted max-retries)))))
 
 (defun %info-to-usage (info)
   (when info
