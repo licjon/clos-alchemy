@@ -125,7 +125,8 @@ examples.
 | =clos-alchemy=            | Core library — introspection, IR, schema                            | =closer-mop=, =yason=, =cl-ppcre=, =cl-llm-backend= |
 | =clos-alchemy/tests=      | Core test suite                                                     | =rove=                                        |
 | =clos-alchemy/tests/gbnf= | GBNF conformance tests (asserts schemas compile to GBNF grammars)   | =rove=, =cl-llama-cpp-extras/json-schema=      |
-| =clos-alchemy/examples=   | Example programs                                                    | =clos-alchemy=, =cl-llm-backend/llama=         |
+| =clos-alchemy/telemetry=  | Reference consumers for extraction lifecycle conditions (logging)   | =clos-alchemy=                                |
+| =clos-alchemy/examples=   | Example programs                                                    | =clos-alchemy=, =clos-alchemy/telemetry=, =cl-llm-backend/llama= |
 
 * How it works
 
@@ -541,6 +542,18 @@ reason). A discriminated union constrains the model to pick exactly one shape.
 (clos-alchemy/examples/union-llama:run)
 #+end_src
 
+** Lifecycle hooks (=telemetry=)
+
+Demonstrates the =extraction-attempt=/=extraction-retry=/=extraction-exhausted=
+conditions and the =abort-extraction=/=retry-with-backend= restarts, plus
+=with-extraction-logging=. Unlike the other examples, this one needs no GGUF
+model — every backend call is scripted with =cl-llm-backend='s
+=mock-backend=, so it's deterministic and runs instantly:
+
+#+begin_src lisp
+(clos-alchemy/examples/telemetry:run)
+#+end_src
+
 * Error handling
 
 When all retries are exhausted, =max-retries-error= is signalled with
@@ -551,6 +564,69 @@ diagnostic context for debugging or salvage:
 - =max-retries-error-usage= — cumulative token usage across all attempts (=:prompt-tokens=, =:completion-tokens=)
 - =max-retries-error-attempts= — list of per-attempt plists (=:raw-response=, =:raw-data=, =:errors=)
 - =max-retries-error-retries= and =max-retries-error-errors= — unchanged from before
+
+* Lifecycle hooks
+
+For real-time observability into the retry loop — logging, metrics,
+circuit-breaking, debugging — =%extract-with-retry= signals CL conditions as
+it runs, rather than requiring you to poll or wrap every call:
+
+- =extraction-attempt= — signaled once per attempt, success or failure
+- =extraction-retry= — signaled when an attempt failed and another attempt
+  will run; establishes the =abort-extraction= and =retry-with-backend=
+  restarts
+- =extraction-exhausted= — signaled immediately before =max-retries-error= is
+  raised
+
+Each condition carries =extraction-event-attempt-number=,
+=-raw-response=, =-raw-data=, =-parse-error=, =-validation-errors=, and
+=-usage= (cumulative token usage so far). These are plain CL conditions, not
+errors — an unhandled =signal= is a no-op, so extraction behaves identically
+whether or not a handler is bound:
+
+#+begin_src lisp
+(handler-bind ((extraction-attempt
+                 (lambda (e)
+                   (format t "attempt ~D: ~D validation errors~%"
+                           (extraction-event-attempt-number e)
+                           (length (extraction-event-validation-errors e))))))
+  (extract backend 'person document))
+#+end_src
+
+** Restarts
+
+=extraction-retry= establishes two restarts a handler can invoke to
+intervene mid-loop:
+
+- =abort-extraction= — stop retrying immediately; raises =max-retries-error=
+  with diagnostics accumulated so far (=:retries= reflects the actual attempt
+  count, not the configured =max-retries=)
+- =retry-with-backend <new-backend>= — swap the backend used for all
+  remaining attempts, e.g. failing over to a healthier backend
+
+#+begin_src lisp
+(handler-bind ((extraction-retry
+                 (lambda (e)
+                   (when (circuit-breaker-tripped-p)
+                     (invoke-restart 'abort-extraction)))))
+  (extract backend 'person document :max-retries 5))
+#+end_src
+
+** Reference logging consumer (=clos-alchemy/telemetry=)
+
+=clos-alchemy/telemetry= ships =with-extraction-logging=, a minimal
+=handler-bind=-based consumer that logs one line per signaled event:
+
+#+begin_src lisp
+(ql:quickload :clos-alchemy/telemetry)
+
+(clos-alchemy/telemetry:with-extraction-logging (*standard-output*)
+  (extract backend 'person document))
+#+end_src
+
+It's a starting point for logging, metrics, or circuit-breaking
+integrations, not a full observability platform — OpenTelemetry-style
+tracing export is left as future work on the same condition protocol.
 
 * Running tests
 
